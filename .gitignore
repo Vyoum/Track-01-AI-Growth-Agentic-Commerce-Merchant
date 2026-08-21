@@ -1,0 +1,32 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Env & secrets
+.env
+.env.local
+*.pem
+
+# SQLite / runtime data
+backend/data/*.db
+backend/data/*.db-*
+backend/audit/audit_log.jsonl
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log

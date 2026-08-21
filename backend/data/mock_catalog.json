@@ -1,0 +1,171 @@
+{
+  "currency": "INR",
+  "products": [
+    {
+      "id": "prod_protein_bundle",
+      "name": "Daily Protein Bundle",
+      "price_inr": 699,
+      "category": "supplements",
+      "stock": 42,
+      "tags": ["protein", "usual", "fitness"],
+      "complements": [
+        { "product_id": "prod_shaker", "priority": 1, "reason": "commonly bought with protein bundles" },
+        { "product_id": "prod_whey_sample", "priority": 2, "reason": "low-cost trial add-on with protein" },
+        { "product_id": "prod_electrolyte", "priority": 3, "reason": "often paired for post-workout recovery" },
+        { "product_id": "prod_protein_bar", "priority": 4, "reason": "on-the-go protein companion" }
+      ]
+    },
+    {
+      "id": "prod_shaker",
+      "name": "Shaker Bottle",
+      "price_inr": 99,
+      "category": "accessories",
+      "stock": 120,
+      "tags": ["shaker", "accessory", "hero_addon"],
+      "complements": [
+        { "product_id": "prod_protein_bundle", "priority": 1, "reason": "pairs with protein powder" }
+      ]
+    },
+    {
+      "id": "prod_creatine",
+      "name": "Creatine Monohydrate 250g",
+      "price_inr": 449,
+      "category": "supplements",
+      "stock": 30,
+      "tags": ["creatine", "fitness"],
+      "complements": [
+        { "product_id": "prod_shaker", "priority": 1, "reason": "used together for mixing" },
+        { "product_id": "prod_electrolyte", "priority": 2, "reason": "hydration support" }
+      ]
+    },
+    {
+      "id": "prod_multivitamin",
+      "name": "Daily Multivitamin 60s",
+      "price_inr": 349,
+      "category": "supplements",
+      "stock": 55,
+      "tags": ["vitamins", "daily"],
+      "complements": [
+        { "product_id": "prod_green_tea", "priority": 1, "reason": "common wellness pairing" }
+      ]
+    },
+    {
+      "id": "prod_oats",
+      "name": "Rolled Oats 1kg",
+      "price_inr": 249,
+      "category": "grocery",
+      "stock": 80,
+      "tags": ["breakfast", "grocery"],
+      "complements": [
+        { "product_id": "prod_peanut_butter", "priority": 1, "reason": "classic breakfast combo" },
+        { "product_id": "prod_protein_bundle", "priority": 2, "reason": "protein + oats meal prep" }
+      ]
+    },
+    {
+      "id": "prod_peanut_butter",
+      "name": "Natural Peanut Butter 500g",
+      "price_inr": 299,
+      "category": "grocery",
+      "stock": 45,
+      "tags": ["spread", "grocery"],
+      "complements": [
+        { "product_id": "prod_oats", "priority": 1, "reason": "classic breakfast combo" },
+        { "product_id": "prod_protein_bar", "priority": 2, "reason": "snack pairing" }
+      ]
+    },
+    {
+      "id": "prod_whey_sample",
+      "name": "Whey Sample Sachet",
+      "price_inr": 79,
+      "category": "supplements",
+      "stock": 200,
+      "tags": ["sample", "budget_addon"],
+      "complements": []
+    },
+    {
+      "id": "prod_yoga_mat",
+      "name": "Yoga Mat",
+      "price_inr": 799,
+      "category": "fitness",
+      "stock": 25,
+      "tags": ["yoga", "fitness"],
+      "complements": [
+        { "product_id": "prod_resistance_band", "priority": 1, "reason": "home workout pairing" }
+      ]
+    },
+    {
+      "id": "prod_resistance_band",
+      "name": "Resistance Band Set",
+      "price_inr": 399,
+      "category": "fitness",
+      "stock": 40,
+      "tags": ["bands", "fitness"],
+      "complements": [
+        { "product_id": "prod_yoga_mat", "priority": 1, "reason": "home workout pairing" }
+      ]
+    },
+    {
+      "id": "prod_green_tea",
+      "name": "Green Tea 100 bags",
+      "price_inr": 199,
+      "category": "grocery",
+      "stock": 60,
+      "tags": ["tea", "wellness"],
+      "complements": [
+        { "product_id": "prod_multivitamin", "priority": 1, "reason": "wellness pairing" }
+      ]
+    },
+    {
+      "id": "prod_electrolyte",
+      "name": "Electrolyte Drink Mix",
+      "price_inr": 149,
+      "category": "supplements",
+      "stock": 70,
+      "tags": ["hydration", "recovery"],
+      "complements": [
+        { "product_id": "prod_shaker", "priority": 1, "reason": "mix and drink" }
+      ]
+    },
+    {
+      "id": "prod_protein_bar",
+      "name": "Protein Bar Box (6)",
+      "price_inr": 299,
+      "category": "grocery",
+      "stock": 35,
+      "tags": ["snack", "protein"],
+      "complements": [
+        { "product_id": "prod_protein_bundle", "priority": 1, "reason": "protein stack" }
+      ]
+    },
+    {
+      "id": "prod_gift_card",
+      "name": "Store Gift Card ₹500",
+      "price_inr": 500,
+      "category": "gift_cards",
+      "stock": 999,
+      "tags": ["denied_demo"],
+      "complements": []
+    },
+    {
+      "id": "prod_alcohol_clean",
+      "name": "Cocktail Mixer Kit",
+      "price_inr": 599,
+      "category": "alcohol_adjacent",
+      "stock": 15,
+      "tags": ["denied_demo"],
+      "complements": []
+    },
+    {
+      "id": "prod_protein_oos",
+      "name": "Limited Edition Flavour",
+      "price_inr": 699,
+      "category": "supplements",
+      "stock": 0,
+      "tags": ["oos_demo", "protein"],
+      "substitute_with": "prod_protein_bundle",
+      "complements": [
+        { "product_id": "prod_shaker", "priority": 1, "reason": "commonly bought with protein" }
+      ]
+    }
+  ]
+}

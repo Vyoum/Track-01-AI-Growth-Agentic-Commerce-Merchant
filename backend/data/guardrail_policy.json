@@ -1,0 +1,55 @@
+{
+  "currency": "INR",
+  "razorpay_mode": "test",
+  "bounds": {
+    "hard_max_order_value_inr": 5000,
+    "max_items_per_proposal": 5,
+    "denied_categories": ["gift_cards", "alcohol_adjacent"],
+    "proposal_ttl_seconds": 600,
+    "payment_max_retries": 1
+  },
+  "gates": {
+    "require_addon_decision_before_payment": true,
+    "require_explicit_payment_confirmation": true,
+    "bind_confirmation_to_proposal_id_and_total": true,
+    "never_auto_add_recommendations": true,
+    "never_trust_client_or_llm_prices": true
+  },
+  "demo_budgets": {
+    "scenario_a_stated_budget_inr": 800,
+    "scenario_b_stated_budget_inr": 700
+  },
+  "confirmation_wording": {
+    "addon_offer_template": "I found your usual order for ₹{baseline_total} ({baseline_summary}). I also found {addon_name} for ₹{addon_price}, which is {addon_reason}. Total would be ₹{projected_total}, still under your ₹{budget} budget. Want me to add it?",
+    "addon_accept_phrases": ["yes, add it", "add it", "yes add it", "add"],
+    "addon_skip_phrases": ["no, just the usual", "skip", "no thanks", "just the usual"],
+    "payment_confirm_template": "Ready to pay ₹{total} for: {line_summary}. Confirm payment?",
+    "payment_confirm_phrases": ["confirm payment", "confirm", "pay now", "yes confirm"],
+    "payment_cancel_phrases": ["cancel", "stop", "no don't pay"]
+  },
+  "growth": {
+    "max_recommendations_shown": 1,
+    "rank_by": ["priority", "price_fit", "stock"],
+    "track_metrics": [
+      "baseline_order_value",
+      "projected_order_value",
+      "accepted_order_value",
+      "uplift_amount",
+      "uplift_percent",
+      "recommendation_shown",
+      "recommendation_accepted",
+      "recommendation_declined",
+      "realized_paid_uplift"
+    ]
+  },
+  "acceptance_criteria": [
+    "No Razorpay call before explicit payment confirmation of exact proposal_id + total",
+    "Recommendations are optional and explained; never silent upsell",
+    "Final proposal total never exceeds stated budget or hard ceiling",
+    "Every skip/trim/substitution/recommendation has a one-line reason",
+    "Audit trail covers money-related decisions with secrets redacted",
+    "Metrics distinguish projected vs realized uplift",
+    "Payment failure: one retry then clear failure message",
+    "Reject non-test Razorpay credentials"
+  ]
+}

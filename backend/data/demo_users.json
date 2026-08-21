@@ -1,0 +1,48 @@
+{
+  "users": [
+    {
+      "user_id": "demo_user_01",
+      "name": "Aisha Khan",
+      "phone": "+91-9000000001",
+      "email": "aisha.demo@example.com",
+      "preferred_budget_inr": 800,
+      "notes": "Primary buildathon demo user. 'Usual' = most recent completed order (ord_demo_003)."
+    }
+  ],
+  "orders": [
+    {
+      "order_id": "ord_demo_001",
+      "user_id": "demo_user_01",
+      "status": "completed",
+      "created_at": "2026-07-05T10:15:00+05:30",
+      "total_inr": 948,
+      "items": [
+        { "product_id": "prod_protein_bundle", "name": "Daily Protein Bundle", "qty": 1, "unit_price_inr": 699 },
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_002",
+      "user_id": "demo_user_01",
+      "status": "completed",
+      "created_at": "2026-07-28T18:40:00+05:30",
+      "total_inr": 798,
+      "items": [
+        { "product_id": "prod_protein_bundle", "name": "Daily Protein Bundle", "qty": 1, "unit_price_inr": 699 },
+        { "product_id": "prod_shaker", "name": "Shaker Bottle", "qty": 1, "unit_price_inr": 99 }
+      ],
+      "notes": "Historical co-purchase used by growth tool as evidence that shaker is commonly bought with protein."
+    },
+    {
+      "order_id": "ord_demo_003",
+      "user_id": "demo_user_01",
+      "status": "completed",
+      "created_at": "2026-08-14T09:05:00+05:30",
+      "total_inr": 699,
+      "items": [
+        { "product_id": "prod_protein_bundle", "name": "Daily Protein Bundle", "qty": 1, "unit_price_inr": 699 }
+      ],
+      "notes": "Defines 'the usual' for Scenario A: baseline ₹699 before growth recommendation."
+    }
+  ]
+}
