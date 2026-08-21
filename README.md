@@ -24,7 +24,22 @@ Razorpay AI Buildathon: AI Growth & Agentic Commerce (merchant demo, **Razorpay 
 .venv/bin/python scripts/smoke_checkout_core.py
 ```
 
-Payment orders are **mock** (`order_mock_…`) until the Razorpay pointer.
+- **Pointer 4** — Growth Decision Tool (optional complementary add-on + uplift metrics)
+
+### Growth flow (Pointer 4)
+
+1. `POST /api/proposals` `{ use_usual: true, stated_budget_inr: 800 }` → baseline ₹699 + shaker offer  
+2. `POST /api/proposals/{id}/growth/decide` `{ decision: "accept" }` → total ₹798  
+3. `POST /api/proposals/{id}/confirm` `{ expected_total_inr: 798 }` → mock payment  
+
+- **Pointer 5–6** — Guardrails (substitute/trim/gates) + audit trail (SQLite/JSONL, redacted)
+
+```bash
+.venv/bin/python scripts/smoke_guardrails.py
+```
+
+Audit: `GET /api/proposals/{id}/audit`
+
 
 ## Quick start
 

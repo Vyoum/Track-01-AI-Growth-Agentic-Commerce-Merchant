@@ -10,6 +10,7 @@ from backend.models import (
     CreateProposalRequest,
     SearchProductsResponse,
 )
+from backend.audit.logger import list_events
 from backend.services import catalog, checkout, history
 
 router = APIRouter(prefix="/api", tags=["checkout"])
@@ -62,3 +63,19 @@ def api_confirm_proposal(proposal_id: str, body: ConfirmationRequest):
 @router.post("/proposals/{proposal_id}/cancel")
 def api_cancel_proposal(proposal_id: str):
     return checkout.cancel_proposal(proposal_id)
+
+
+@router.get("/proposals/{proposal_id}/audit")
+def api_proposal_audit(proposal_id: str, limit: int = Query(default=100, ge=1, le=500)):
+    return {"proposal_id": proposal_id, "events": list_events(proposal_id=proposal_id, limit=limit)}
+
+
+@router.get("/audit")
+def api_audit(
+    session_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    return {
+        "events": list_events(session_id=session_id, user_id=user_id, limit=limit),
+    }

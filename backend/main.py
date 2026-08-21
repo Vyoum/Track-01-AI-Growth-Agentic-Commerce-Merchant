@@ -71,9 +71,9 @@ def meta() -> dict:
         "features": {
             "chat": True,
             "agent": False,
-            "growth": False,
+            "growth": True,
             "checkout_core": True,
             "razorpay": False,
         },
-        "message": "Checkout core ready: products → usual → proposal → confirm (mock payment order).",
+        "message": "Guardrails + audit ready. Money actions are gated, explainable, and logged.",
     }

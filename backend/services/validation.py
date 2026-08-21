@@ -1,4 +1,4 @@
-"""Core proposal validation (bounds). Full gated guardrails expand later."""
+"""Thin validation helpers — prefer agent.guardrails for full policy."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ def validate_cart(
     cart: Cart,
     stated_budget_inr: int | None = None,
 ) -> list[ValidationIssue]:
+    """Bounds-only check for an already-built cart (e.g. after add-on accept)."""
     policy = load_policy()
     bounds = policy.get("bounds", {})
     issues: list[ValidationIssue] = []
@@ -44,10 +45,7 @@ def validate_cart(
 
     if not cart.items:
         issues.append(
-            ValidationIssue(
-                code="empty_cart",
-                message="Cart has no valid items",
-            )
+            ValidationIssue(code="empty_cart", message="Cart has no valid items")
         )
 
     return issues

@@ -32,6 +32,7 @@ def main() -> None:
             use_usual=True,
             stated_budget_inr=800,
             session_id="smoke_session",
+            with_growth=False,
         )
     )
     assert proposal.total_inr == 699

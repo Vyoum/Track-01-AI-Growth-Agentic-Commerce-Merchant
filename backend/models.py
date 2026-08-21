@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class ProposalStatus(str, Enum):
     DRAFT = "draft"
+    AWAITING_ADDON_DECISION = "awaiting_addon_decision"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     CONFIRMED = "confirmed"
     PAYMENT_PENDING = "payment_pending"
@@ -88,6 +89,44 @@ class ValidationIssue(BaseModel):
     product_id: str | None = None
 
 
+class GrowthCandidate(BaseModel):
+    product_id: str
+    name: str
+    price_inr: int
+    reason: str
+    priority: int
+    source: str = "catalog_complements"
+    remaining_budget_after_inr: int
+    projected_total_inr: int
+    uplift_amount_inr: int
+    uplift_percent: float
+
+
+class GrowthOffer(BaseModel):
+    product_id: str
+    name: str
+    price_inr: int
+    reason: str
+    source: str
+    offer_text: str
+    projected_total_inr: int
+    uplift_amount_inr: int
+    uplift_percent: float
+
+
+class GrowthMetrics(BaseModel):
+    baseline_order_value: int
+    projected_order_value: int | None = None
+    accepted_order_value: int | None = None
+    uplift_amount: int | None = None
+    uplift_percent: float | None = None
+    recommendation_shown: bool = False
+    recommendation_accepted: bool | None = None
+    recommendation_declined: bool | None = None
+    realized_paid_uplift: int | None = None
+    candidates_considered: int = 0
+
+
 class Proposal(BaseModel):
     id: str
     user_id: str
@@ -102,6 +141,10 @@ class Proposal(BaseModel):
     created_at: datetime
     expires_at: datetime
     confirmed_at: datetime | None = None
+    baseline_total_inr: int | None = None
+    growth_offer: GrowthOffer | None = None
+    growth_metrics: GrowthMetrics | None = None
+    rejected_addon_ids: list[str] = Field(default_factory=list)
 
     @property
     def line_summary(self) -> str:
@@ -111,6 +154,24 @@ class Proposal(BaseModel):
 class ConfirmationRequest(BaseModel):
     expected_total_inr: int
     idempotency_key: str | None = None
+    user_id: str | None = None
+
+
+class AddonDecisionRequest(BaseModel):
+    decision: str  # "accept" | "skip"
+    product_id: str | None = None
+
+
+class CreateProposalRequest(BaseModel):
+    user_id: str
+    product_ids: list[str] = Field(default_factory=list)
+    quantities: dict[str, int] = Field(default_factory=dict)
+    stated_budget_inr: int | None = None
+    session_id: str | None = None
+    use_usual: bool = False
+    with_growth: bool = True
+    allow_substitute: bool = True
+    allow_trim: bool = False
 
 
 class PaymentRecord(BaseModel):
@@ -123,15 +184,6 @@ class PaymentRecord(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
-
-
-class CreateProposalRequest(BaseModel):
-    user_id: str
-    product_ids: list[str] = Field(default_factory=list)
-    quantities: dict[str, int] = Field(default_factory=dict)
-    stated_budget_inr: int | None = None
-    session_id: str | None = None
-    use_usual: bool = False
 
 
 class SearchProductsResponse(BaseModel):
