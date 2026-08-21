@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from backend.models import (
+    AddonDecisionRequest,
     ConfirmationRequest,
     CreateProposalRequest,
     SearchProductsResponse,
@@ -46,6 +47,11 @@ def api_create_proposal(body: CreateProposalRequest):
 @router.get("/proposals/{proposal_id}")
 def api_get_proposal(proposal_id: str):
     return checkout.get_proposal(proposal_id)
+
+
+@router.post("/proposals/{proposal_id}/growth/decide")
+def api_decide_addon(proposal_id: str, body: AddonDecisionRequest):
+    return checkout.decide_addon(proposal_id, body)
 
 
 @router.post("/proposals/{proposal_id}/confirm")
