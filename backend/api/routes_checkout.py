@@ -8,7 +8,9 @@ from backend.models import (
     AddonDecisionRequest,
     ConfirmationRequest,
     CreateProposalRequest,
+    FailPaymentRequest,
     SearchProductsResponse,
+    VerifyPaymentRequest,
 )
 from backend.audit.logger import list_events
 from backend.services import catalog, checkout, history
@@ -63,6 +65,16 @@ def api_confirm_proposal(proposal_id: str, body: ConfirmationRequest):
 @router.post("/proposals/{proposal_id}/cancel")
 def api_cancel_proposal(proposal_id: str):
     return checkout.cancel_proposal(proposal_id)
+
+
+@router.post("/proposals/{proposal_id}/payment/fail")
+def api_fail_payment(proposal_id: str, body: FailPaymentRequest):
+    return checkout.fail_payment(proposal_id, body)
+
+
+@router.post("/payments/verify")
+def api_verify_payment(body: VerifyPaymentRequest):
+    return checkout.verify_payment(body)
 
 
 @router.get("/proposals/{proposal_id}/audit")

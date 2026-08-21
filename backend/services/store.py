@@ -99,6 +99,33 @@ def get_payment_by_proposal(proposal_id: str) -> PaymentRecord | None:
     return PaymentRecord.model_validate(json.loads(row["payload_json"]))
 
 
+def get_payment(payment_id: str) -> PaymentRecord | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM payments WHERE id = ?",
+            (payment_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return PaymentRecord.model_validate(json.loads(row["payload_json"]))
+
+
+def get_payment_by_razorpay_order(razorpay_order_id: str) -> PaymentRecord | None:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT payload_json FROM payments
+            WHERE razorpay_order_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (razorpay_order_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return PaymentRecord.model_validate(json.loads(row["payload_json"]))
+
+
 def get_payment_by_idempotency(idempotency_key: str) -> PaymentRecord | None:
     with connect() as conn:
         rows = conn.execute("SELECT payload_json FROM payments").fetchall()

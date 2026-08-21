@@ -25,7 +25,8 @@ export default function App() {
           <p className="eyebrow">Razorpay Buildathon · Track 01</p>
           <h1>{meta?.merchant || "Checkout Agent"}</h1>
           <p className="sub">
-            Conversational in-app checkout (scaffold). Agent + growth + payments come next.
+            {meta?.message ||
+              "Conversational checkout with growth upsell and Razorpay test payments."}
           </p>
         </div>
         <div className="status-pill" data-ok={health?.status === "ok"}>
@@ -35,10 +36,16 @@ export default function App() {
 
       <main className="layout">
         <ChatWindow
-          onProposalHint={(hint) => setProposal(hint)}
+          onProposalHint={(hint) => {
+            if (hint && hint.id) setProposal(hint);
+          }}
           backendMessage={meta?.message}
         />
-        <OrderSummaryCard proposal={proposal} health={health} />
+        <OrderSummaryCard
+          proposal={proposal}
+          setProposal={setProposal}
+          health={health}
+        />
       </main>
     </div>
   );

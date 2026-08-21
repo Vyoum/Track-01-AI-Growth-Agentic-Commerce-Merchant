@@ -1,4 +1,4 @@
-"""Checkout Agent API — deterministic checkout core."""
+"""Checkout Agent API — Razorpay test-mode checkout ready."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from backend.api.routes_checkout import router as checkout_router
 from backend.config import get_settings
 from backend.db import init_db
+from backend.integrations.razorpay_client import keys_are_usable
 
 settings = get_settings()
 
@@ -26,7 +28,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Conversational Checkout Agent",
     description="Razorpay Buildathon Track 01 — AI Growth & Agentic Commerce (test mode)",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -41,8 +43,14 @@ app.add_middleware(
 app.include_router(checkout_router)
 
 
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/docs")
+
+
 @app.get("/health")
 def health() -> dict:
+    razorpay_ready = keys_are_usable(settings)
     return {
         "status": "ok",
         "app_env": settings.app_env,
@@ -57,12 +65,14 @@ def health() -> dict:
             if settings.razorpay_key_id
             else None
         ),
+        "razorpay_test_ready": razorpay_ready,
         "checkout_core": True,
     }
 
 
 @app.get("/api/meta")
 def meta() -> dict:
+    razorpay_ready = keys_are_usable(settings)
     return {
         "merchant": "Demo Fitness Store",
         "track": "Track 01 — AI Growth & Agentic Commerce",
@@ -73,7 +83,13 @@ def meta() -> dict:
             "agent": False,
             "growth": True,
             "checkout_core": True,
-            "razorpay": False,
+            "razorpay": True,
+            "razorpay_test_ready": razorpay_ready,
         },
-        "message": "Guardrails + audit ready. Money actions are gated, explainable, and logged.",
+        "message": (
+            "Razorpay test checkout ready — add rzp_test_ keys for live test orders; "
+            "placeholder keys fall back to mock verify."
+            if not razorpay_ready
+            else "Razorpay test keys detected — confirm creates a real test-mode order."
+        ),
     }

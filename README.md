@@ -38,7 +38,23 @@ Razorpay AI Buildathon: AI Growth & Agentic Commerce (merchant demo, **Razorpay 
 .venv/bin/python scripts/smoke_guardrails.py
 ```
 
-Audit: `GET /api/proposals/{id}/audit`
+- **Pointer 7** — Razorpay test-mode checkout (real orders when keys set; mock verify fallback)
+
+### Razorpay (Pointer 7)
+
+1. Put real test keys in `.env`:
+   ```bash
+   RAZORPAY_KEY_ID=rzp_test_...
+   RAZORPAY_KEY_SECRET=...
+   RAZORPAY_MODE=test
+   ```
+2. Restart API → `/health` shows `"razorpay_test_ready": true`
+3. UI: **Start demo** → **Add it** → **Confirm & pay** → Razorpay Checkout (test card)
+4. Without keys: same UI auto-verifies with mock signature (no dashboard txn)
+
+```bash
+.venv/bin/python scripts/smoke_razorpay.py
+```
 
 
 ## Quick start

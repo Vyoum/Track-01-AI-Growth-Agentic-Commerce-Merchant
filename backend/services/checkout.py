@@ -18,10 +18,12 @@ from backend.models import (
     Cart,
     ConfirmationRequest,
     CreateProposalRequest,
+    FailPaymentRequest,
     PaymentRecord,
     PaymentStatus,
     Proposal,
     ProposalStatus,
+    VerifyPaymentRequest,
 )
 from backend.services.cart import build_line_item
 from backend.services.data_loader import load_policy
@@ -323,14 +325,41 @@ def decide_addon(proposal_id: str, body: AddonDecisionRequest) -> Proposal:
 
 
 def _growth_summary(proposal: Proposal) -> dict:
+    realized = None
+    if proposal.growth_metrics:
+        realized = proposal.growth_metrics.realized_paid_uplift
     return {
         "baseline_total_inr": proposal.baseline_total_inr,
         "paid_total_inr": proposal.total_inr,
         "projected_uplift_inr": (
             proposal.growth_metrics.uplift_amount if proposal.growth_metrics else 0
         ),
-        "realized_paid_uplift": None,
-        "note": "realized_paid_uplift stays null until Razorpay payment succeeds",
+        "realized_paid_uplift": realized,
+        "note": (
+            "realized_paid_uplift is set only after Razorpay payment is verified as paid"
+            if realized is None
+            else "payment verified — uplift realized"
+        ),
+    }
+
+
+def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
+    from backend.integrations.razorpay_client import get_razorpay_client
+
+    client = get_razorpay_client()
+    return {
+        "key_id": client.public_key_id if not payment.mock else None,
+        "order_id": payment.razorpay_order_id,
+        "amount_paise": payment.amount_inr * 100,
+        "currency": "INR",
+        "name": "Demo Fitness Store",
+        "description": proposal.line_summary[:120],
+        "prefill": {"name": "Aisha Khan"},
+        "notes": {
+            "proposal_id": proposal.id,
+            "payment_id": payment.id,
+        },
+        "mock": payment.mock,
     }
 
 
@@ -354,6 +383,7 @@ def confirm_proposal(
             return {
                 "proposal": prior,
                 "payment": existing,
+                "checkout": _checkout_payload(existing, prior),
                 "idempotent_replay": True,
                 "growth_summary": _growth_summary(prior),
             }
@@ -367,11 +397,11 @@ def confirm_proposal(
         return {
             "proposal": proposal,
             "payment": payment,
+            "checkout": _checkout_payload(payment, proposal) if payment else None,
             "idempotent_replay": True,
             "growth_summary": _growth_summary(proposal),
         }
 
-    # Hard gate: exact proposal + total (+ optional user bind)
     assert_payment_confirmation_gate(
         proposal,
         expected_total_inr=body.expected_total_inr,
@@ -397,19 +427,69 @@ def confirm_proposal(
         proposal.growth_metrics.accepted_order_value = proposal.total_inr
         store.save_proposal(proposal)
 
+    from backend.integrations.razorpay_client import (
+        RazorpayConfigError,
+        get_razorpay_client,
+    )
+
+    client = get_razorpay_client()
+    policy = load_policy()
+    max_retries = int(policy.get("bounds", {}).get("payment_max_retries", 1))
+    receipt = f"rcpt_{proposal.id[-12:]}"
+    notes = {
+        "proposal_id": proposal.id,
+        "user_id": proposal.user_id,
+        "baseline_total_inr": proposal.baseline_total_inr or proposal.total_inr,
+    }
+
+    created = None
+    last_error: str | None = None
+    attempts = 0
+    while attempts <= max_retries:
+        attempts += 1
+        try:
+            created = client.create_order(
+                amount_inr=proposal.total_inr,
+                receipt=receipt,
+                notes=notes,
+            )
+            break
+        except RazorpayConfigError as exc:
+            last_error = str(exc)
+            log_event(
+                "razorpay_order_create_failed",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={"attempt": attempts, "error": last_error},
+            )
+            if attempts > max_retries:
+                proposal = store.mark_proposal_status(proposal, ProposalStatus.FAILED)
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "message": "Razorpay order creation failed after retry",
+                        "error": last_error,
+                        "attempts": attempts,
+                    },
+                ) from exc
+
+    assert created is not None
     now = _now()
     payment = PaymentRecord(
         id=f"pay_{uuid.uuid4().hex[:12]}",
         proposal_id=proposal.id,
-        status=PaymentStatus.CREATED,
+        status=PaymentStatus.PENDING,
         amount_inr=proposal.total_inr,
-        razorpay_order_id=f"order_mock_{uuid.uuid4().hex[:14]}",
-        mock=True,
+        razorpay_order_id=created.order_id,
+        mock=created.mock,
+        retry_count=max(0, attempts - 1),
         payload={
-            "note": "Mock Razorpay order. Real Razorpay wired later.",
             "idempotency_key": body.idempotency_key,
-            "currency": "INR",
-            "amount_paise": proposal.total_inr * 100,
+            "currency": created.currency,
+            "amount_paise": created.amount_paise,
+            "receipt": created.receipt,
+            "razorpay_raw": created.raw,
             "baseline_total_inr": proposal.baseline_total_inr,
             "projected_uplift_inr": (
                 proposal.growth_metrics.uplift_amount if proposal.growth_metrics else None
@@ -429,7 +509,97 @@ def confirm_proposal(
             "payment_id": payment.id,
             "amount_inr": payment.amount_inr,
             "razorpay_order_id": payment.razorpay_order_id,
-            "mock": True,
+            "mock": payment.mock,
+            "retry_count": payment.retry_count,
+        },
+    )
+    return {
+        "proposal": proposal,
+        "payment": payment,
+        "checkout": _checkout_payload(payment, proposal),
+        "idempotent_replay": False,
+        "growth_summary": _growth_summary(proposal),
+        "next_step": (
+            "Open Razorpay Checkout with checkout payload, then POST /api/payments/verify"
+            if not payment.mock
+            else "Mock mode: POST /api/payments/verify with mock_ok_ signature, or add real rzp_test_ keys"
+        ),
+    }
+
+
+def verify_payment(body: VerifyPaymentRequest) -> dict:
+    payment = None
+    if body.payment_id:
+        payment = store.get_payment(body.payment_id)
+    if payment is None:
+        payment = store.get_payment_by_razorpay_order(body.razorpay_order_id)
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    proposal = get_proposal(payment.proposal_id)
+
+    if payment.status == PaymentStatus.PAID:
+        return {
+            "proposal": proposal,
+            "payment": payment,
+            "idempotent_replay": True,
+            "growth_summary": _growth_summary(proposal),
+        }
+
+    if body.razorpay_order_id != payment.razorpay_order_id:
+        raise HTTPException(status_code=409, detail="Order id mismatch")
+
+    from backend.integrations.razorpay_client import get_razorpay_client
+
+    client = get_razorpay_client()
+    ok = client.verify_payment_signature(
+        razorpay_order_id=body.razorpay_order_id,
+        razorpay_payment_id=body.razorpay_payment_id,
+        razorpay_signature=body.razorpay_signature,
+    )
+    if not ok:
+        payment = store.mark_payment_status(payment, PaymentStatus.FAILED)
+        log_event(
+            "payment_signature_invalid",
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            proposal_id=proposal.id,
+            payload={"payment_id": payment.id},
+        )
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    payment.razorpay_payment_id = body.razorpay_payment_id
+    payment.status = PaymentStatus.PAID
+    payment.updated_at = _now()
+    payment.payload["razorpay_signature_verified"] = True
+    payment.payload["razorpay_payment_id"] = body.razorpay_payment_id
+
+    # Realized uplift only on verified paid
+    if proposal.growth_metrics and proposal.baseline_total_inr is not None:
+        realized = max(0, proposal.total_inr - proposal.baseline_total_inr)
+        if proposal.growth_metrics.recommendation_accepted:
+            proposal.growth_metrics.realized_paid_uplift = realized
+            payment.payload["realized_paid_uplift"] = realized
+        else:
+            proposal.growth_metrics.realized_paid_uplift = 0
+            payment.payload["realized_paid_uplift"] = 0
+
+    store.save_payment(payment)
+    proposal = store.mark_proposal_status(proposal, ProposalStatus.PAID)
+    store.save_proposal(proposal)
+
+    log_event(
+        "payment_verified_paid",
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        proposal_id=proposal.id,
+        payload={
+            "payment_id": payment.id,
+            "razorpay_order_id": payment.razorpay_order_id,
+            "razorpay_payment_id": payment.razorpay_payment_id,
+            "amount_inr": payment.amount_inr,
+            "mock": payment.mock,
+            "realized_paid_uplift": payment.payload.get("realized_paid_uplift"),
         },
     )
     return {
@@ -437,7 +607,36 @@ def confirm_proposal(
         "payment": payment,
         "idempotent_replay": False,
         "growth_summary": _growth_summary(proposal),
-        "next_step": "Wire Razorpay Checkout in a later pointer using payment.razorpay_order_id",
+    }
+
+
+def fail_payment(proposal_id: str, body: FailPaymentRequest) -> dict:
+    proposal = get_proposal(proposal_id)
+    payment = store.get_payment_by_proposal(proposal_id)
+    if payment is None:
+        raise HTTPException(status_code=404, detail="No payment for proposal")
+    if payment.status == PaymentStatus.PAID:
+        raise HTTPException(status_code=409, detail="Already paid")
+
+    payment = store.mark_payment_status(payment, PaymentStatus.FAILED)
+    payment.payload["failure_reason"] = body.reason
+    store.save_payment(payment)
+    proposal = store.mark_proposal_status(proposal, ProposalStatus.FAILED)
+    log_event(
+        "payment_failed",
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        proposal_id=proposal.id,
+        payload={
+            "payment_id": payment.id,
+            "reason": body.reason,
+            "note": "One clear failure after cancel/decline — no silent hang",
+        },
+    )
+    return {
+        "proposal": proposal,
+        "payment": payment,
+        "message": f"Payment failed: {body.reason}. You can create a new proposal to retry.",
     }
 
 

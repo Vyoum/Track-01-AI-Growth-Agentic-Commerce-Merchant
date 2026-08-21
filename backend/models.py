@@ -180,10 +180,24 @@ class PaymentRecord(BaseModel):
     status: PaymentStatus
     amount_inr: int
     razorpay_order_id: str | None = None
+    razorpay_payment_id: str | None = None
     mock: bool = True
+    retry_count: int = 0
     payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    payment_id: str | None = None
+
+
+class FailPaymentRequest(BaseModel):
+    reason: str = "user_cancelled"
+    payment_id: str | None = None
 
 
 class SearchProductsResponse(BaseModel):
