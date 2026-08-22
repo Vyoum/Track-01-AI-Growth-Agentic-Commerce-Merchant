@@ -35,8 +35,18 @@ class Settings(BaseSettings):
     demo_user_id: str = Field(default="demo_user_01", alias="DEMO_USER_ID")
     use_mock_catalog: bool = Field(default=True, alias="USE_MOCK_CATALOG")
 
-    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
-    llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
+    # Groq (OpenAI-compatible) for Pointer 8 agent + tool calling
+    llm_provider: str = Field(default="groq", alias="LLM_PROVIDER")
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")  # legacy alias
+    llm_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        alias="LLM_MODEL",
+    )
+    llm_base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        alias="LLM_BASE_URL",
+    )
 
     razorpay_key_id: str = Field(default="", alias="RAZORPAY_KEY_ID")
     razorpay_key_secret: str = Field(default="", alias="RAZORPAY_KEY_SECRET")
@@ -68,6 +78,11 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def effective_llm_api_key(self) -> str:
+        """Groq key preferred; LLM_API_KEY kept for backward compatibility."""
+        return (self.groq_api_key or self.llm_api_key or "").strip()
 
     @property
     def sqlite_path(self) -> Path:

@@ -20,6 +20,7 @@ _SECRET_KEYS = {
     "password",
     "authorization",
     "api_key",
+    "groq_api_key",
     "llm_api_key",
 }
 _SECRET_PATTERN = re.compile(r"(rzp_test_|rzp_live_)[A-Za-z0-9]+")
