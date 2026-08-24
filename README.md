@@ -60,8 +60,24 @@ Razorpay AI Buildathon: AI Growth & Agentic Commerce (merchant demo, **Razorpay 
 2. Open http://127.0.0.1:5173
 3. Chat: `Order my usual, under ₹800` → `yes, add it` → `confirm payment`
 
+- **Pointer 9** — Merchant store adapter (mock by default; live HTTP when configured)
+
+### Merchant adapter (Pointer 9)
+
+Default: `USE_MOCK_CATALOG=true` (local JSON).
+
+To exercise the live HTTP adapter against this app’s mock merchant API:
+
 ```bash
-.venv/bin/python scripts/smoke_agent.py
+USE_MOCK_CATALOG=false
+STORE_API_BASE_URL=http://127.0.0.1:8000/merchant-mock
+STORE_FALLBACK_TO_MOCK=true
+```
+
+Contract: [`docs/merchant_api_contract.md`](docs/merchant_api_contract.md)
+
+```bash
+.venv/bin/python scripts/smoke_merchant.py
 ```
 
 

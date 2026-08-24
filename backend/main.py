@@ -1,4 +1,4 @@
-"""Checkout Agent API — Razorpay test-mode checkout ready."""
+"""Checkout Agent API — merchant adapter + Razorpay test checkout."""
 
 from __future__ import annotations
 
@@ -11,9 +11,11 @@ from fastapi.responses import RedirectResponse
 
 from backend.api.routes_agent import router as agent_router
 from backend.api.routes_checkout import router as checkout_router
+from backend.api.routes_merchant_mock import router as merchant_mock_router
 from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.razorpay_client import keys_are_usable
+from backend.services import store_source
 
 settings = get_settings()
 
@@ -29,7 +31,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Conversational Checkout Agent",
     description="Razorpay Buildathon Track 01 — AI Growth & Agentic Commerce (test mode)",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -43,6 +45,7 @@ app.add_middleware(
 
 app.include_router(checkout_router)
 app.include_router(agent_router)
+app.include_router(merchant_mock_router)
 
 
 @app.get("/")
@@ -58,6 +61,8 @@ def health() -> dict:
         "app_env": settings.app_env,
         "razorpay_mode": settings.razorpay_mode,
         "use_mock_catalog": settings.use_mock_catalog,
+        "catalog_source": store_source.source_label(),
+        "store_api_configured": bool(settings.store_api_base_url.strip()),
         "demo_user_id": settings.demo_user_id,
         "db_path": getattr(app.state, "db_path", None),
         "started_at": getattr(app.state, "started_at", None),
@@ -75,11 +80,13 @@ def health() -> dict:
 @app.get("/api/meta")
 def meta() -> dict:
     razorpay_ready = keys_are_usable(settings)
+    source = store_source.source_label()
     return {
         "merchant": "Demo Fitness Store",
         "track": "Track 01 — AI Growth & Agentic Commerce",
         "demo_user_id": settings.demo_user_id,
         "currency": "INR",
+        "catalog_source": source,
         "features": {
             "chat": True,
             "agent": bool(settings.effective_llm_api_key),
@@ -87,10 +94,14 @@ def meta() -> dict:
             "checkout_core": True,
             "razorpay": True,
             "razorpay_test_ready": razorpay_ready,
+            "merchant_adapter": True,
         },
         "message": (
-            "Chat agent ready (Groq). Try: 'Order my usual, under ₹800'."
-            if settings.effective_llm_api_key
-            else "Add GROQ_API_KEY for full chat; gates + fallback still work."
+            f"Catalog source: {source}. "
+            + (
+                "Chat agent ready (Groq). Try: 'Order my usual, under ₹800'."
+                if settings.effective_llm_api_key
+                else "Add GROQ_API_KEY for full chat; gates + fallback still work."
+            )
         ),
     }
