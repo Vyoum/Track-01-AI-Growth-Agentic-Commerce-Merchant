@@ -30,6 +30,14 @@ export function fetchMeta() {
   return getJson("/api/meta");
 }
 
+export function sendChat(message, sessionId) {
+  return postJson("/api/chat", {
+    message,
+    session_id: sessionId || undefined,
+    user_id: "demo_user_01",
+  });
+}
+
 export function createUsualProposal(budget = 800) {
   return postJson("/api/proposals", {
     user_id: "demo_user_01",
@@ -75,4 +83,21 @@ export function loadRazorpayScript() {
     script.onerror = () => reject(new Error("Failed to load Razorpay checkout.js"));
     document.body.appendChild(script);
   });
+}
+
+export async function openRazorpayCheckout(result, onSuccess, onDismiss) {
+  const Razorpay = await loadRazorpayScript();
+  const options = {
+    key: result.checkout.key_id,
+    amount: result.checkout.amount_paise,
+    currency: result.checkout.currency,
+    name: result.checkout.name,
+    description: result.checkout.description,
+    order_id: result.checkout.order_id,
+    notes: result.checkout.notes,
+    handler: onSuccess,
+    modal: { ondismiss: onDismiss },
+  };
+  const rzp = new Razorpay(options);
+  rzp.open();
 }

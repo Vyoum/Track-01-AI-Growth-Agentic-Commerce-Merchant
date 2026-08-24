@@ -52,8 +52,16 @@ Razorpay AI Buildathon: AI Growth & Agentic Commerce (merchant demo, **Razorpay 
 3. UI: **Start demo** → **Add it** → **Confirm & pay** → Razorpay Checkout (test card)
 4. Without keys: same UI auto-verifies with mock signature (no dashboard txn)
 
+- **Pointer 8** — Groq chat agent + tool calling + gated phrases
+
+### Chat demo (Pointer 8)
+
+1. Restart API after setting `GROQ_API_KEY` and `LLM_MODEL=openai/gpt-oss-120b`
+2. Open http://127.0.0.1:5173
+3. Chat: `Order my usual, under ₹800` → `yes, add it` → `confirm payment`
+
 ```bash
-.venv/bin/python scripts/smoke_razorpay.py
+.venv/bin/python scripts/smoke_agent.py
 ```
 
 

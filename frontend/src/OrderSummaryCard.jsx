@@ -8,15 +8,17 @@ import {
   verifyPayment,
 } from "./api.js";
 
-export default function OrderSummaryCard({ proposal, setProposal, health }) {
+export default function OrderSummaryCard({ proposal, setProposal, health, checkoutResult }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [checkoutResult, setCheckoutResult] = useState(null);
+  const [localCheckout, setLocalCheckout] = useState(null);
+
+  const activeCheckout = checkoutResult || localCheckout;
 
   async function startDemo() {
     setBusy(true);
     setMessage("");
-    setCheckoutResult(null);
+    setLocalCheckout(null);
     try {
       const p = await createUsualProposal(800);
       setProposal(p);
@@ -57,7 +59,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health }) {
     try {
       const result = await confirmProposal(proposal.id, proposal.total_inr);
       setProposal(result.proposal);
-      setCheckoutResult(result);
+      setLocalCheckout(result);
 
       if (result.checkout?.mock) {
         // Local mock verify path (no real Razorpay keys)
@@ -68,7 +70,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health }) {
           razorpay_signature: "mock_ok_demo",
         });
         setProposal(verified.proposal);
-        setCheckoutResult(verified);
+        setLocalCheckout(verified);
         setMessage(
           `Mock payment verified ₹${verified.payment.amount_inr}. ` +
             `Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}. ` +
@@ -103,7 +105,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health }) {
             razorpay_signature: response.razorpay_signature,
           });
           setProposal(verified.proposal);
-          setCheckoutResult(verified);
+          setLocalCheckout(verified);
           setMessage(
             `Paid ₹${verified.payment.amount_inr}. ` +
               `Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}`
@@ -140,7 +142,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health }) {
       </div>
 
       {!proposal ? (
-        <p className="muted">No proposal yet. Start the demo flow.</p>
+        <p className="muted">No proposal yet — use chat or the demo button.</p>
       ) : (
         <dl className="summary-grid">
           <dt>Proposal</dt>
@@ -184,15 +186,15 @@ export default function OrderSummaryCard({ proposal, setProposal, health }) {
 
       {message && <p className="msg">{message}</p>}
 
-      {checkoutResult?.growth_summary && (
+      {activeCheckout?.growth_summary && (
         <dl className="summary-grid">
           <dt>Projected uplift</dt>
-          <dd>₹{checkoutResult.growth_summary.projected_uplift_inr ?? 0}</dd>
+          <dd>₹{activeCheckout.growth_summary.projected_uplift_inr ?? 0}</dd>
           <dt>Realized uplift</dt>
           <dd>
-            {checkoutResult.growth_summary.realized_paid_uplift == null
+            {activeCheckout.growth_summary.realized_paid_uplift == null
               ? "pending verify"
-              : `₹${checkoutResult.growth_summary.realized_paid_uplift}`}
+              : `₹${activeCheckout.growth_summary.realized_paid_uplift}`}
           </dd>
         </dl>
       )}

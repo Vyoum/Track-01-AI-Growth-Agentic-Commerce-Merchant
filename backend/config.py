@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")  # legacy alias
     llm_model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="openai/gpt-oss-120b",
         alias="LLM_MODEL",
     )
     llm_base_url: str = Field(
@@ -59,6 +59,17 @@ class Settings(BaseSettings):
         if normalized != "test":
             raise ValueError("RAZORPAY_MODE must be 'test' for this project")
         return normalized
+
+    @model_validator(mode="after")
+    def groq_model_sanity(self) -> "Settings":
+        if self.llm_provider.lower() == "groq" and (
+            "gpt-4" in self.llm_model.lower()
+            or self.llm_model.startswith("o1")
+            or self.llm_model == "llama-3.3-70b-versatile"
+            or self.llm_model == "gpt-4o-mini"
+        ):
+            object.__setattr__(self, "llm_model", "openai/gpt-oss-120b")
+        return self
 
     @model_validator(mode="after")
     def reject_live_razorpay_keys(self) -> "Settings":

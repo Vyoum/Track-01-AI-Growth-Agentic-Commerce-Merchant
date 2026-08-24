@@ -8,6 +8,8 @@ export default function App() {
   const [health, setHealth] = useState(null);
   const [error, setError] = useState("");
   const [proposal, setProposal] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [checkoutResult, setCheckoutResult] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchMeta(), fetchHealth()])
@@ -26,25 +28,33 @@ export default function App() {
           <h1>{meta?.merchant || "Checkout Agent"}</h1>
           <p className="sub">
             {meta?.message ||
-              "Conversational checkout with growth upsell and Razorpay test payments."}
+              "Chat to order, get growth upsell, and pay via Razorpay test mode."}
           </p>
         </div>
         <div className="status-pill" data-ok={health?.status === "ok"}>
-          {health?.status === "ok" ? "API online" : error || "Checking API…"}
+          {health?.status === "ok"
+            ? meta?.features?.agent
+              ? "Agent online (Groq)"
+              : "API online"
+            : error || "Checking API…"}
         </div>
       </header>
 
       <main className="layout">
         <ChatWindow
-          onProposalHint={(hint) => {
-            if (hint && hint.id) setProposal(hint);
+          sessionId={sessionId}
+          setSessionId={setSessionId}
+          onProposalHint={setProposal}
+          onCheckoutReady={(result) => {
+            setCheckoutResult(result);
+            if (result.proposal) setProposal(result.proposal);
           }}
-          backendMessage={meta?.message}
         />
         <OrderSummaryCard
           proposal={proposal}
           setProposal={setProposal}
           health={health}
+          checkoutResult={checkoutResult}
         />
       </main>
     </div>

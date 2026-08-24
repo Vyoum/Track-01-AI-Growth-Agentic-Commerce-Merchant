@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
+from backend.api.routes_agent import router as agent_router
 from backend.api.routes_checkout import router as checkout_router
 from backend.config import get_settings
 from backend.db import init_db
@@ -41,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(checkout_router)
+app.include_router(agent_router)
 
 
 @app.get("/")
@@ -80,16 +82,15 @@ def meta() -> dict:
         "currency": "INR",
         "features": {
             "chat": True,
-            "agent": False,
+            "agent": bool(settings.effective_llm_api_key),
             "growth": True,
             "checkout_core": True,
             "razorpay": True,
             "razorpay_test_ready": razorpay_ready,
         },
         "message": (
-            "Razorpay test checkout ready — add rzp_test_ keys for live test orders; "
-            "placeholder keys fall back to mock verify."
-            if not razorpay_ready
-            else "Razorpay test keys detected — confirm creates a real test-mode order."
+            "Chat agent ready (Groq). Try: 'Order my usual, under ₹800'."
+            if settings.effective_llm_api_key
+            else "Add GROQ_API_KEY for full chat; gates + fallback still work."
         ),
     }
