@@ -175,6 +175,20 @@ def main() -> None:
     types = {e["event_type"] for e in events}
     for needed in needed_audit:
         assert needed in types, f"missing audit event {needed}: {types}"
+
+    trace = next(e for e in events if e["event_type"] == "decision_trace")
+    check_ids = {c["id"] for c in trace["payload"]["checks"]}
+    for required_check in {
+        "history_checked",
+        "stock_check_passed",
+        "budget_check_passed",
+        "candidate_products_evaluated",
+        "growth_reason_calculated",
+    }:
+        assert required_check in check_ids, f"missing check {required_check}: {check_ids}"
+    assert trace["payload"]["summary"]["all_required_passed"] is True
+    print("decision checks ok:", trace["payload"]["summary"])
+
     print("audit ok:", sorted(types))
 
     redacted = redact({"razorpay_key_secret": "supersecret", "note": "rzp_test_abc123xyz"})

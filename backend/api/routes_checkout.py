@@ -84,10 +84,14 @@ def api_proposal_audit(proposal_id: str, limit: int = Query(default=100, ge=1, l
         (e for e in reversed(events) if e["event_type"] == "decision_trace"),
         None,
     )
+    gate_events = [e for e in events if e["event_type"] == "gate_trace"]
     return {
         "proposal_id": proposal_id,
         "events": events,
         "decision_trace": trace_event["payload"] if trace_event else None,
+        "gate_traces": [e["payload"] for e in gate_events],
+        "checks": trace_event["payload"].get("checks") if trace_event else None,
+        "checks_summary": trace_event["payload"].get("summary") if trace_event else None,
     }
 
 

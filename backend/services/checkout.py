@@ -8,11 +8,16 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from backend.agent.guardrails import (
+    GuardrailResult,
     apply_cart_guardrails,
     assert_payment_confirmation_gate,
     payment_confirm_prompt,
 )
-from backend.audit.decision_trace import build_proposal_decision_trace
+from backend.audit.checks import (
+    build_addon_decision_checks,
+    build_payment_gate_checks,
+)
+from backend.audit.decision_trace import build_gate_trace, build_proposal_decision_trace
 from backend.audit.logger import log_event
 from backend.models import (
     AddonDecisionRequest,
@@ -96,20 +101,89 @@ def _user_request_summary(req: CreateProposalRequest) -> str | None:
 
 def _log_decision_trace(
     *,
-    proposal: Proposal,
+    proposal: Proposal | None,
     growth_result: GrowthDecisionResult | None,
+    guarded: GuardrailResult | None,
     history_outcome: dict | None,
     user_request_summary: str | None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    stated_budget_inr: int | None = None,
+    rejected: bool = False,
 ) -> None:
-    trace = build_proposal_decision_trace(
-        proposal=proposal,
-        growth_result=growth_result,
-        history_outcome=history_outcome,
-        guardrail_passed=True,
-        user_request_summary=user_request_summary,
-    )
+    if proposal is None:
+        from backend.audit.checks import (
+            build_guardrail_checks,
+            build_history_checks,
+            format_checks_narrative,
+            summarize_checks,
+        )
+        from backend.models import Proposal as ProposalModel
+
+        stub = ProposalModel(
+            id="rejected",
+            user_id=user_id or "",
+            session_id=session_id,
+            status=ProposalStatus.DRAFT,
+            items=[],
+            total_inr=guarded.cart.total_inr if guarded else 0,
+            stated_budget_inr=stated_budget_inr,
+            created_at=_now(),
+            expires_at=_now(),
+            proposal_source="rejected",
+            source_reason="proposal failed guardrails",
+        )
+        checks = build_history_checks(history_outcome=history_outcome, proposal=stub)
+        if guarded:
+            bounds = load_policy().get("bounds", {})
+            checks.extend(
+                build_guardrail_checks(
+                    guarded=guarded,
+                    stated_budget_inr=stated_budget_inr,
+                    hard_max_inr=int(bounds.get("hard_max_order_value_inr", 5000)),
+                    max_items=int(bounds.get("max_items_per_proposal", 5)),
+                )
+            )
+        summary = summarize_checks(checks)
+        trace = {
+            "title": "DECISION TRACE (REJECTED)",
+            "proposal_id": None,
+            "rejected": rejected,
+            "user_request": user_request_summary,
+            "checks": [c.to_dict() for c in checks],
+            "summary": summary,
+            "narrative": format_checks_narrative(checks, summary),
+            "all_required_passed": False,
+        }
+    else:
+        trace = build_proposal_decision_trace(
+            proposal=proposal,
+            growth_result=growth_result,
+            guarded=guarded,
+            history_outcome=history_outcome,
+            user_request_summary=user_request_summary,
+        )
+        if rejected:
+            trace["rejected"] = True
+
     log_event(
         "decision_trace",
+        user_id=user_id or (proposal.user_id if proposal else None),
+        session_id=session_id or (proposal.session_id if proposal else None),
+        proposal_id=proposal.id if proposal else None,
+        payload=trace,
+    )
+
+
+def _log_gate_trace(
+    *,
+    proposal: Proposal,
+    checks: list,
+    gate_name: str,
+) -> None:
+    trace = build_gate_trace(checks, gate_name=gate_name, proposal_id=proposal.id)
+    log_event(
+        "gate_trace",
         user_id=proposal.user_id,
         session_id=proposal.session_id,
         proposal_id=proposal.id,
@@ -235,6 +309,17 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
             session_id=req.session_id,
             payload={"issues": [i.model_dump() for i in guarded.blocking_issues]},
         )
+        _log_decision_trace(
+            proposal=None,
+            growth_result=None,
+            guarded=guarded,
+            history_outcome=history_outcome,
+            user_request_summary=_user_request_summary(req),
+            session_id=req.session_id,
+            user_id=req.user_id,
+            stated_budget_inr=req.stated_budget_inr,
+            rejected=True,
+        )
         raise HTTPException(
             status_code=400,
             detail={
@@ -287,6 +372,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
         _log_decision_trace(
             proposal=proposal,
             growth_result=None,
+            guarded=guarded,
             history_outcome=history_outcome,
             user_request_summary=_user_request_summary(req),
         )
@@ -295,6 +381,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
     _log_decision_trace(
         proposal=proposal,
         growth_result=growth_result,
+        guarded=guarded,
         history_outcome=history_outcome,
         user_request_summary=_user_request_summary(req),
     )
@@ -377,6 +464,18 @@ def decide_addon(proposal_id: str, body: AddonDecisionRequest) -> Proposal:
                 "payment_confirm_prompt": payment_confirm_prompt(proposal),
             },
         )
+        baseline = proposal.baseline_total_inr or proposal.total_inr
+        _log_gate_trace(
+            proposal=proposal,
+            checks=build_addon_decision_checks(
+                decision="skip",
+                product_id=body.product_id,
+                offer_product_id=offer.product_id,
+                new_total_inr=proposal.total_inr,
+                baseline_inr=baseline,
+            ),
+            gate_name="addon_decision",
+        )
         return proposal
 
     line, issue = build_line_item(
@@ -439,6 +538,18 @@ def decide_addon(proposal_id: str, body: AddonDecisionRequest) -> Proposal:
             "note": "Add-on acceptance is NOT payment confirmation",
             "payment_confirm_prompt": payment_confirm_prompt(proposal),
         },
+    )
+    baseline = proposal.baseline_total_inr or metrics.baseline_order_value
+    _log_gate_trace(
+        proposal=proposal,
+        checks=build_addon_decision_checks(
+            decision="accept",
+            product_id=body.product_id or offer.product_id,
+            offer_product_id=offer.product_id,
+            new_total_inr=proposal.total_inr,
+            baseline_inr=baseline,
+        ),
+        gate_name="addon_decision",
     )
     return proposal
 
@@ -525,6 +636,16 @@ def confirm_proposal(
         proposal,
         expected_total_inr=body.expected_total_inr,
         user_id=body.user_id,
+    )
+
+    _log_gate_trace(
+        proposal=proposal,
+        checks=build_payment_gate_checks(
+            proposal=proposal,
+            expected_total_inr=body.expected_total_inr,
+            user_id=body.user_id,
+        ),
+        gate_name="payment_confirmation",
     )
 
     log_event(
