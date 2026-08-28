@@ -139,6 +139,7 @@ def main() -> None:
         "proposal_created",
         "growth_offer_shown",
         "addon_accepted",
+        "decision_trace",
     }
 
     if keys_are_usable():

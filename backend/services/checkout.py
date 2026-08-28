@@ -12,6 +12,7 @@ from backend.agent.guardrails import (
     assert_payment_confirmation_gate,
     payment_confirm_prompt,
 )
+from backend.audit.decision_trace import build_proposal_decision_trace
 from backend.audit.logger import log_event
 from backend.models import (
     AddonDecisionRequest,
@@ -32,7 +33,7 @@ from backend.services.bestsellers import (
     get_bestseller_seed,
 )
 from backend.services.data_loader import load_policy
-from backend.services.growth import recommend_addon
+from backend.services.growth import GrowthDecisionResult, recommend_addon
 from backend.services.history import get_usual_order
 from backend.services import catalog, store
 from backend.services.validation import validate_cart
@@ -42,7 +43,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _attach_growth(proposal: Proposal) -> Proposal:
+def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
     cart = Cart(user_id=proposal.user_id, items=list(proposal.items))
     result = recommend_addon(
         cart=cart,
@@ -79,7 +80,41 @@ def _attach_growth(proposal: Proposal) -> Proposal:
             payload={"skipped_reasons": result.skipped_reasons},
         )
     store.save_proposal(proposal)
-    return proposal
+    return proposal, result
+
+
+def _user_request_summary(req: CreateProposalRequest) -> str | None:
+    parts: list[str] = []
+    if req.use_usual:
+        parts.append("order usual")
+    elif req.product_ids:
+        parts.append("order requested products")
+    if req.stated_budget_inr is not None:
+        parts.append(f"under ₹{req.stated_budget_inr}")
+    return ", ".join(parts) if parts else None
+
+
+def _log_decision_trace(
+    *,
+    proposal: Proposal,
+    growth_result: GrowthDecisionResult | None,
+    history_outcome: dict | None,
+    user_request_summary: str | None,
+) -> None:
+    trace = build_proposal_decision_trace(
+        proposal=proposal,
+        growth_result=growth_result,
+        history_outcome=history_outcome,
+        guardrail_passed=True,
+        user_request_summary=user_request_summary,
+    )
+    log_event(
+        "decision_trace",
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        proposal_id=proposal.id,
+        payload=trace,
+    )
 
 
 def create_proposal(req: CreateProposalRequest) -> Proposal:
@@ -92,9 +127,16 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
     protect: set[str] = set()
     proposal_source = "requested_products"
     source_reason = "based on products you requested"
+    history_outcome: dict | None = None
 
     if req.use_usual:
         usual = get_usual_order(req.user_id)
+        history_outcome = {
+            "order_found": bool(usual.items),
+            "order_id": usual.order_id,
+            "source": usual.source,
+            "total_inr": usual.total_inr,
+        }
         unavailable_usual_ids = [
             item.product_id
             for item in usual.items
@@ -238,8 +280,24 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
         },
     )
 
+    growth_result: GrowthDecisionResult | None = None
     if req.with_growth:
-        proposal = _attach_growth(proposal)
+        proposal, growth_result = _attach_growth(proposal)
+    else:
+        _log_decision_trace(
+            proposal=proposal,
+            growth_result=None,
+            history_outcome=history_outcome,
+            user_request_summary=_user_request_summary(req),
+        )
+        return proposal
+
+    _log_decision_trace(
+        proposal=proposal,
+        growth_result=growth_result,
+        history_outcome=history_outcome,
+        user_request_summary=_user_request_summary(req),
+    )
     return proposal
 
 

@@ -79,7 +79,16 @@ def api_verify_payment(body: VerifyPaymentRequest):
 
 @router.get("/proposals/{proposal_id}/audit")
 def api_proposal_audit(proposal_id: str, limit: int = Query(default=100, ge=1, le=500)):
-    return {"proposal_id": proposal_id, "events": list_events(proposal_id=proposal_id, limit=limit)}
+    events = list_events(proposal_id=proposal_id, limit=limit)
+    trace_event = next(
+        (e for e in reversed(events) if e["event_type"] == "decision_trace"),
+        None,
+    )
+    return {
+        "proposal_id": proposal_id,
+        "events": events,
+        "decision_trace": trace_event["payload"] if trace_event else None,
+    }
 
 
 @router.get("/audit")

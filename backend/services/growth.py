@@ -18,11 +18,30 @@ from backend.services.data_loader import load_demo_users, load_policy
 
 
 @dataclass
+class CandidateEvaluation:
+    product_id: str
+    name: str
+    price_inr: int
+    status: str  # eligible | rejected
+    reason: str
+
+
+@dataclass
 class GrowthDecisionResult:
     offer: GrowthOffer | None
     candidates: list[GrowthCandidate]
     metrics: GrowthMetrics
     skipped_reasons: list[str]
+    growth_method: str | None = None
+    has_relationship_data: bool = False
+    candidate_evaluations: list[CandidateEvaluation] | None = None
+    selection_rationale: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.candidate_evaluations is None:
+            self.candidate_evaluations = []
+        if self.selection_rationale is None:
+            self.selection_rationale = []
 
 
 def _co_purchase_boost(user_id: str | None, base_ids: set[str], candidate_id: str) -> bool:
@@ -145,6 +164,7 @@ def _popular_budget_fit_candidates(
     denied: set[str],
     max_items: int,
     skipped_reasons: list[str],
+    evaluations: list[CandidateEvaluation],
 ) -> list[GrowthCandidate]:
     """When no complement data exists, suggest one popular item within budget headroom."""
     policy = load_policy()
@@ -175,18 +195,60 @@ def _popular_budget_fit_candidates(
     eligible: list[Product] = []
     for product in catalog.list_products():
         if product.id in in_cart:
+            evaluations.append(
+                CandidateEvaluation(
+                    product.id, product.name, product.price_inr, "rejected", "already in cart"
+                )
+            )
             continue
         if product.id in rejected:
+            evaluations.append(
+                CandidateEvaluation(
+                    product.id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    "declined earlier this session",
+                )
+            )
             skipped_reasons.append(f"{product.id}: previously declined this session")
             continue
         if product.stock < 1:
+            evaluations.append(
+                CandidateEvaluation(
+                    product.id, product.name, product.price_inr, "rejected", "out of stock"
+                )
+            )
             continue
         if product.category in denied:
+            evaluations.append(
+                CandidateEvaluation(
+                    product.id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    "denied category",
+                )
+            )
             continue
         if product.price_inr > remaining:
+            evaluations.append(
+                CandidateEvaluation(
+                    product.id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    f"over remaining budget ₹{remaining}",
+                )
+            )
             continue
         if cart.item_count + 1 > max_items:
             break
+        evaluations.append(
+            CandidateEvaluation(
+                product.id, product.name, product.price_inr, "eligible", "fits budget and stock"
+            )
+        )
         eligible.append(product)
 
     if not eligible:
@@ -285,14 +347,19 @@ def recommend_addon(
         candidates_considered=0,
     )
     skipped_reasons: list[str] = []
+    evaluations: list[CandidateEvaluation] = []
 
     if stated_budget_inr is not None and baseline > stated_budget_inr:
         skipped_reasons.append("baseline already exceeds stated budget")
-        return GrowthDecisionResult(None, [], metrics, skipped_reasons)
+        return GrowthDecisionResult(
+            None, [], metrics, skipped_reasons, growth_method="none", has_relationship_data=False
+        )
 
     if cart.item_count >= max_items:
         skipped_reasons.append("cart already at max item count")
-        return GrowthDecisionResult(None, [], metrics, skipped_reasons)
+        return GrowthDecisionResult(
+            None, [], metrics, skipped_reasons, growth_method="none", has_relationship_data=False
+        )
 
     in_cart = {i.product_id for i in cart.items}
     remaining = (
@@ -310,34 +377,90 @@ def recommend_addon(
             if existing is None or ref.priority < existing[0]:
                 raw_refs[ref.product_id] = (ref.priority, ref.reason)
 
+    has_relationship_data = bool(raw_refs)
     candidates: list[GrowthCandidate] = []
     for product_id, (priority, reason) in raw_refs.items():
+        product = get_product(product_id)
+        pname = product.name if product else product_id
+        pprice = product.price_inr if product else 0
+
         if product_id in in_cart:
             skipped_reasons.append(f"{product_id}: already in cart")
+            evaluations.append(
+                CandidateEvaluation(product_id, pname, pprice, "rejected", "already in cart")
+            )
             continue
         if product_id in rejected:
             skipped_reasons.append(f"{product_id}: previously declined this session")
+            evaluations.append(
+                CandidateEvaluation(
+                    product_id, pname, pprice, "rejected", "declined earlier this session"
+                )
+            )
             continue
 
-        product = get_product(product_id)
         if product is None:
             skipped_reasons.append(f"{product_id}: unknown product")
+            evaluations.append(
+                CandidateEvaluation(product_id, product_id, 0, "rejected", "unknown product")
+            )
             continue
         if product.stock < 1:
             skipped_reasons.append(f"{product_id}: out of stock")
+            evaluations.append(
+                CandidateEvaluation(
+                    product_id, product.name, product.price_inr, "rejected", "out of stock"
+                )
+            )
             continue
         if product.category in denied:
             skipped_reasons.append(f"{product_id}: denied category")
+            evaluations.append(
+                CandidateEvaluation(
+                    product_id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    "denied category",
+                )
+            )
             continue
         if remaining is not None and product.price_inr > remaining:
             skipped_reasons.append(
                 f"{product_id}: ₹{product.price_inr} exceeds remaining budget ₹{remaining}"
             )
+            evaluations.append(
+                CandidateEvaluation(
+                    product_id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    f"over remaining budget ₹{remaining}",
+                )
+            )
             continue
         if cart.item_count + 1 > max_items:
             skipped_reasons.append(f"{product_id}: would exceed max items")
+            evaluations.append(
+                CandidateEvaluation(
+                    product_id,
+                    product.name,
+                    product.price_inr,
+                    "rejected",
+                    "would exceed max items",
+                )
+            )
             continue
 
+        evaluations.append(
+            CandidateEvaluation(
+                product_id,
+                product.name,
+                product.price_inr,
+                "eligible",
+                reason or "catalog complement",
+            )
+        )
         source = "catalog_complements"
         if _co_purchase_boost(user_id or cart.user_id, in_cart, product_id):
             source = "catalog_complements+co_purchase_history"
@@ -366,12 +489,33 @@ def recommend_addon(
             proposal_source=proposal_source,
             source_reason=source_reason,
         )
-        return GrowthDecisionResult(offer, candidates, metrics, skipped_reasons)
+        best = min(candidates, key=lambda c: (c.priority, -c.uplift_amount_inr))
+        rationale = [f"complement priority {best.priority}", "in stock"]
+        if best.source.endswith("co_purchase_history"):
+            rationale.insert(0, "co-purchase history boost")
+        return GrowthDecisionResult(
+            offer,
+            candidates,
+            metrics,
+            skipped_reasons,
+            growth_method="catalog_complements",
+            has_relationship_data=True,
+            candidate_evaluations=evaluations,
+            selection_rationale=rationale,
+        )
 
     # Relationship data existed but nothing passed eligibility — do not fallback.
     if raw_refs:
         metrics.candidates_considered = 0
-        return GrowthDecisionResult(None, [], metrics, skipped_reasons)
+        return GrowthDecisionResult(
+            None,
+            [],
+            metrics,
+            skipped_reasons,
+            growth_method="catalog_complements",
+            has_relationship_data=True,
+            candidate_evaluations=evaluations,
+        )
 
     # No complement/relationship data — popular add-on within remaining budget headroom.
     if remaining is not None and remaining > 0:
@@ -384,6 +528,7 @@ def recommend_addon(
             denied=denied,
             max_items=max_items,
             skipped_reasons=skipped_reasons,
+            evaluations=evaluations,
         )
         metrics.candidates_considered = len(fallback_candidates)
         if fallback_candidates:
@@ -397,8 +542,36 @@ def recommend_addon(
                 proposal_source=proposal_source,
                 source_reason=source_reason,
             )
+            bestseller_cfg = policy.get("bestsellers", {})
+            configured_rank = list(bestseller_cfg.get("fallback_ranked_product_ids", []))
+            configured_position = {
+                pid: pos for pos, pid in enumerate(configured_rank)
+            }
+            winner = get_product(offer.product_id)
+            rationale = ["highest eligible price within remaining budget", "in stock"]
+            if winner and _is_popular_product(winner, configured_position):
+                rank = configured_position.get(winner.id)
+                if rank is not None:
+                    rationale.append(f"popular rank #{rank + 1}")
+                elif winner.is_bestseller:
+                    rationale.append("bestseller")
             return GrowthDecisionResult(
-                offer, fallback_candidates, metrics, skipped_reasons
+                offer,
+                fallback_candidates,
+                metrics,
+                skipped_reasons,
+                growth_method="popular_budget_fit",
+                has_relationship_data=False,
+                candidate_evaluations=evaluations,
+                selection_rationale=rationale,
             )
 
-    return GrowthDecisionResult(None, [], metrics, skipped_reasons)
+    return GrowthDecisionResult(
+        None,
+        [],
+        metrics,
+        skipped_reasons,
+        growth_method="none",
+        has_relationship_data=has_relationship_data,
+        candidate_evaluations=evaluations,
+    )
