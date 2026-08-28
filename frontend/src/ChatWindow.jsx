@@ -16,6 +16,7 @@ const STARTER = [
 export default function ChatWindow({
   onProposalHint,
   onCheckoutReady,
+  onUserMessage,
   sessionId,
   setSessionId,
 }) {
@@ -29,6 +30,7 @@ export default function ChatWindow({
 
     setBusy(true);
     setInput("");
+    onUserMessage?.(text);
     setMessages((prev) => [...prev, { role: "user", text }]);
 
     try {

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ChatWindow from "./ChatWindow.jsx";
+import DecisionCenter from "./DecisionCenter.jsx";
 import OrderSummaryCard from "./OrderSummaryCard.jsx";
-import { fetchMeta, fetchHealth } from "./api.js";
+import { fetchMeta, fetchHealth, fetchProposalAudit } from "./api.js";
 
 export default function App() {
   const [meta, setMeta] = useState(null);
@@ -10,6 +11,24 @@ export default function App() {
   const [proposal, setProposal] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [checkoutResult, setCheckoutResult] = useState(null);
+  const [audit, setAudit] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [lastUserRequest, setLastUserRequest] = useState(
+    'Order my usual, under ₹800'
+  );
+
+  const loadAudit = useCallback(async (proposalId) => {
+    if (!proposalId) return;
+    setAuditLoading(true);
+    try {
+      const data = await fetchProposalAudit(proposalId);
+      setAudit(data);
+    } catch {
+      setAudit(null);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([fetchMeta(), fetchHealth()])
@@ -19,6 +38,19 @@ export default function App() {
       })
       .catch((err) => setError(err.message || "Backend unreachable"));
   }, []);
+
+  useEffect(() => {
+    if (proposal?.id) {
+      loadAudit(proposal.id);
+    }
+  }, [proposal?.id, proposal?.status, checkoutResult?.payment?.status, loadAudit]);
+
+  const showDecisionCenter =
+    proposal &&
+    (checkoutResult?.payment ||
+      proposal.status === "awaiting_addon_decision" ||
+      proposal.status === "awaiting_confirmation" ||
+      proposal.growth_offer);
 
   return (
     <div className="app">
@@ -44,18 +76,34 @@ export default function App() {
         <ChatWindow
           sessionId={sessionId}
           setSessionId={setSessionId}
+          onUserMessage={setLastUserRequest}
           onProposalHint={setProposal}
           onCheckoutReady={(result) => {
             setCheckoutResult(result);
             if (result.proposal) setProposal(result.proposal);
           }}
         />
-        <OrderSummaryCard
-          proposal={proposal}
-          setProposal={setProposal}
-          health={health}
-          checkoutResult={checkoutResult}
-        />
+        <div className="side-stack">
+          <OrderSummaryCard
+            proposal={proposal}
+            setProposal={setProposal}
+            health={health}
+            checkoutResult={checkoutResult}
+            onCheckoutReady={(result) => {
+              setCheckoutResult(result);
+              if (result.proposal) setProposal(result.proposal);
+            }}
+          />
+          {showDecisionCenter && (
+            <DecisionCenter
+              proposal={proposal}
+              checkoutResult={checkoutResult}
+              audit={audit}
+              userRequest={lastUserRequest}
+              loading={auditLoading}
+            />
+          )}
+        </div>
       </main>
     </div>
   );

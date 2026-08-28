@@ -77,6 +77,159 @@ h1 {
   gap: 16px;
 }
 
+.side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.side-stack .panel {
+  min-height: unset;
+}
+
+.decision-center {
+  background: #0a0f0c;
+  border: 1px solid #2f4a3a;
+  border-radius: 16px;
+  padding: 18px 16px;
+  font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  box-shadow: inset 0 0 0 1px #1a2e24;
+}
+
+.dc-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.dc-banner h2 {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  color: #7fd4a8;
+  white-space: nowrap;
+}
+
+.dc-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #3d9b6a, transparent);
+}
+
+.dc-banner-foot {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.dc-block {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed #24352c;
+}
+
+.dc-block:last-of-type {
+  border-bottom: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.dc-block h3 {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: #6a9a82;
+  font-weight: 600;
+}
+
+.dc-quote {
+  margin: 0;
+  color: #d8efe4;
+  font-style: italic;
+}
+
+.dc-amount {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #e8f0eb;
+  font-weight: 600;
+}
+
+.dc-meta {
+  margin: 4px 0 0;
+  color: #8ea396;
+}
+
+.dc-mono {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.dc-items,
+.dc-why {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  color: #b8cfc4;
+}
+
+.dc-items li,
+.dc-why li {
+  margin-bottom: 2px;
+}
+
+.dc-guardrails {
+  margin: 0;
+}
+
+.dc-guard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.dc-guard-row dt {
+  color: #cfe6d8;
+  font-weight: 500;
+}
+
+.dc-guard-row dd {
+  margin: 0;
+}
+
+.dc-pass {
+  color: #6ee7a8;
+}
+
+.dc-fail {
+  color: #f87171;
+}
+
+.dc-pending {
+  color: #9ab0a6;
+}
+
+.dc-approval {
+  margin: 0;
+  color: #d8efe4;
+}
+
+.dc-loading {
+  margin: 0 0 12px;
+  color: #8ea396;
+  font-style: italic;
+}
+
+.dc-summary {
+  margin: 12px 0 0;
+  color: #7a9488;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 .panel {
   background: color-mix(in srgb, var(--panel) 92%, black);
   border: 1px solid var(--line);

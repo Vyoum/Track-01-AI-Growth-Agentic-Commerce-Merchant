@@ -22,6 +22,10 @@ async function postJson(path, body) {
   return data;
 }
 
+export function fetchProposalAudit(proposalId) {
+  return getJson(`/api/proposals/${proposalId}/audit`);
+}
+
 export function fetchHealth() {
   return getJson("/health");
 }

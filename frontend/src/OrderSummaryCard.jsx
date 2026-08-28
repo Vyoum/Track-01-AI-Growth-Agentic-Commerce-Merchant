@@ -8,7 +8,13 @@ import {
   verifyPayment,
 } from "./api.js";
 
-export default function OrderSummaryCard({ proposal, setProposal, health, checkoutResult }) {
+export default function OrderSummaryCard({
+  proposal,
+  setProposal,
+  health,
+  checkoutResult,
+  onCheckoutReady,
+}) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [localCheckout, setLocalCheckout] = useState(null);
@@ -60,6 +66,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health, checko
       const result = await confirmProposal(proposal.id, proposal.total_inr);
       setProposal(result.proposal);
       setLocalCheckout(result);
+      onCheckoutReady?.(result);
 
       if (result.checkout?.mock) {
         // Local mock verify path (no real Razorpay keys)
@@ -71,6 +78,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health, checko
         });
         setProposal(verified.proposal);
         setLocalCheckout(verified);
+        onCheckoutReady?.(verified);
         setMessage(
           `Mock payment verified ₹${verified.payment.amount_inr}. ` +
             `Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}. ` +
@@ -106,6 +114,7 @@ export default function OrderSummaryCard({ proposal, setProposal, health, checko
           });
           setProposal(verified.proposal);
           setLocalCheckout(verified);
+          onCheckoutReady?.(verified);
           setMessage(
             `Paid ₹${verified.payment.amount_inr}. ` +
               `Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}`
