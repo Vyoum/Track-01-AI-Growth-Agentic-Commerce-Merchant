@@ -49,6 +49,8 @@ def _attach_growth(proposal: Proposal) -> Proposal:
         stated_budget_inr=proposal.stated_budget_inr,
         rejected_addon_ids=proposal.rejected_addon_ids,
         user_id=proposal.user_id,
+        proposal_source=proposal.proposal_source,
+        source_reason=proposal.source_reason,
     )
     proposal.baseline_total_inr = proposal.total_inr
     proposal.growth_metrics = result.metrics
@@ -236,7 +238,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
         },
     )
 
-    if req.with_growth and proposal.proposal_source != "bestsellers":
+    if req.with_growth:
         proposal = _attach_growth(proposal)
     return proposal
 

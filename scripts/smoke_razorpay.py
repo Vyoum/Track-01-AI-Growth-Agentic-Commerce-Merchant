@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.razorpay_client import keys_are_usable, get_razorpay_client
 from backend.models import (
@@ -23,28 +24,46 @@ from backend.models import (
 from backend.services import checkout
 
 
+def _demo_user_id() -> str:
+    return get_settings().demo_user_id
+
+
 def main() -> None:
     init_db()
+    user_id = _demo_user_id()
+    budget_inr = 800
     client = get_razorpay_client()
+    print(f"using DEMO_USER_ID={user_id!r}")
     print("razorpay_test_ready:", keys_are_usable(), "client.live_ready:", client.live_ready)
 
     proposal = checkout.create_proposal(
         CreateProposalRequest(
-            user_id="demo_user_01",
+            user_id=user_id,
             use_usual=True,
-            stated_budget_inr=800,
+            stated_budget_inr=budget_inr,
             with_growth=True,
         )
     )
+    if proposal.growth_offer is None:
+        raise SystemExit(
+            f"No growth offer for {user_id!r} (baseline ₹{proposal.total_inr})"
+        )
+
+    offer = proposal.growth_offer
+    projected_total = offer.projected_total_inr
+    uplift = offer.uplift_amount_inr
+
     proposal = checkout.decide_addon(
         proposal.id,
-        AddonDecisionRequest(decision="accept", product_id="prod_shaker"),
+        AddonDecisionRequest(decision="accept", product_id=offer.product_id),
     )
+    assert proposal.total_inr == projected_total
+
     result = checkout.confirm_proposal(
         proposal.id,
         ConfirmationRequest(
-            expected_total_inr=798,
-            user_id="demo_user_01",
+            expected_total_inr=projected_total,
+            user_id=user_id,
             idempotency_key=f"rzp-smoke-{uuid.uuid4().hex[:8]}",
         ),
     )
@@ -64,21 +83,22 @@ def main() -> None:
             )
         )
         assert verified["payment"].status.value == "paid"
-        assert verified["growth_summary"]["realized_paid_uplift"] == 99
-        print("mock verify ok: realized uplift ₹99")
+        assert verified["growth_summary"]["realized_paid_uplift"] == uplift
+        print(f"mock verify ok: realized uplift ₹{uplift}")
 
-        # Failure path on a fresh proposal
+        # Failure path on a fresh proposal (no growth)
         p2 = checkout.create_proposal(
             CreateProposalRequest(
-                user_id="demo_user_01",
+                user_id=user_id,
                 use_usual=True,
-                stated_budget_inr=800,
+                stated_budget_inr=budget_inr,
                 with_growth=False,
             )
         )
+        baseline = p2.total_inr
         c2 = checkout.confirm_proposal(
             p2.id,
-            ConfirmationRequest(expected_total_inr=699, user_id="demo_user_01"),
+            ConfirmationRequest(expected_total_inr=baseline, user_id=user_id),
         )
         failed = checkout.fail_payment(
             p2.id, FailPaymentRequest(reason="user_cancelled")
@@ -91,7 +111,17 @@ def main() -> None:
             "then POST /api/payments/verify with Razorpay response fields."
         )
 
-    print(json.dumps({"status": "pointer7_razorpay_smoke_passed"}, indent=2))
+    print(
+        json.dumps(
+            {
+                "status": "pointer7_razorpay_smoke_passed",
+                "demo_user_id": user_id,
+                "projected_total_inr": projected_total,
+                "addon_product_id": offer.product_id,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

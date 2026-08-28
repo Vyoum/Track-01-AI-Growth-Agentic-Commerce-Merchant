@@ -21,6 +21,7 @@
   },
   "confirmation_wording": {
     "addon_offer_template": "I found your usual order for ₹{baseline_total} ({baseline_summary}). I also found {addon_name} for ₹{addon_price}, which is {addon_reason}. Total would be ₹{projected_total}, still under your ₹{budget} budget. Want me to add it?",
+    "bestseller_addon_offer_template": "{source_reason}: {baseline_summary} for ₹{baseline_total}. I also found {addon_name} for ₹{addon_price}, which is {addon_reason}. Total would be ₹{projected_total}, still under your ₹{budget} budget. Want me to add it?",
     "addon_accept_phrases": ["yes, add it", "add it", "yes add it", "add"],
     "addon_skip_phrases": ["no, just the usual", "skip", "no thanks", "just the usual"],
     "payment_confirm_template": "Ready to pay ₹{total} for: {line_summary}. Confirm payment?",
@@ -30,6 +31,11 @@
   "growth": {
     "max_recommendations_shown": 1,
     "rank_by": ["priority", "price_fit", "stock"],
+    "popular_budget_fallback": {
+      "enabled": true,
+      "min_remaining_inr": 1,
+      "reason_template": "a popular add-on that fits your remaining ₹{remaining} budget"
+    },
     "track_metrics": [
       "baseline_order_value",
       "projected_order_value",
