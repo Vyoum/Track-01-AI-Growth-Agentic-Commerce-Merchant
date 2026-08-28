@@ -55,6 +55,10 @@ class SupabaseStoreClient:
         self.order_date_column = self.settings.supabase_order_date_column
         self.order_items_fk = self.settings.supabase_order_items_fk
         self.product_id_column = self.settings.supabase_product_id_column
+        self.inventory_table = self.settings.supabase_inventory_table
+        self.inventory_product_column = self.settings.supabase_inventory_product_column
+        self.inventory_quantity_column = self.settings.supabase_inventory_quantity_column
+        self.inventory_reserved_column = self.settings.supabase_inventory_reserved_column
 
     @property
     def configured(self) -> bool:
@@ -125,6 +129,75 @@ class SupabaseStoreClient:
             return f"*,{relation}(*)"
         return "*"
 
+    def _uses_inventory_table(self) -> bool:
+        table = (self.inventory_table or "").strip()
+        return bool(table and _SAFE_IDENT.match(table))
+
+    def _fetch_stock_by_product(
+        self,
+        product_ids: list[str] | None = None,
+    ) -> dict[str, int]:
+        if not self._uses_inventory_table():
+            return {}
+
+        cols = [
+            self.inventory_product_column,
+            self.inventory_quantity_column,
+        ]
+        if (self.inventory_reserved_column or "").strip():
+            cols.append(self.inventory_reserved_column)
+
+        params: dict[str, Any] = {"select": ",".join(cols)}
+        if product_ids:
+            safe_ids = [pid for pid in product_ids if pid]
+            if safe_ids:
+                quoted = ",".join(f'"{pid}"' for pid in safe_ids)
+                params[self.inventory_product_column] = f"in.({quoted})"
+
+        rows = self._as_rows(
+            self._get(self._rest_url(self.inventory_table), params=params)
+        )
+        stock: dict[str, int] = {}
+        for row in rows:
+            pid = str(row.get(self.inventory_product_column) or "")
+            if not pid:
+                continue
+            qty = int(row.get(self.inventory_quantity_column) or 0)
+            reserved = int(row.get(self.inventory_reserved_column) or 0)
+            stock[pid] = stock.get(pid, 0) + max(0, qty - reserved)
+        return stock
+
+    def _apply_inventory_stock(
+        self,
+        products: list[Product],
+        stock_by_product: dict[str, int],
+    ) -> list[Product]:
+        if not self._uses_inventory_table():
+            return products
+        enriched: list[Product] = []
+        for product in products:
+            enriched.append(
+                product.model_copy(
+                    update={"stock": stock_by_product.get(product.id, 0)}
+                )
+            )
+        return enriched
+
+    def _map_product_row(
+        self,
+        raw: dict[str, Any],
+        *,
+        stock_by_product: dict[str, int] | None = None,
+    ) -> Product:
+        product = map_product(
+            raw,
+            default_stock=self.settings.supabase_default_stock,
+        )
+        if self._uses_inventory_table():
+            stock = (stock_by_product or {}).get(product.id, 0)
+            return product.model_copy(update={"stock": stock})
+        return product
+
     def list_products(
         self,
         query: str = "",
@@ -141,10 +214,16 @@ class SupabaseStoreClient:
                 f"{self.product_id_column}.ilike.*{safe}*)"
             )
         data = self._get(self._rest_url(self.products_table), params=params)
+        raw_rows = self._as_rows(data)
+        stock_by_product = self._fetch_stock_by_product(
+            [str(row.get(self.product_id_column) or row.get("id") or "") for row in raw_rows]
+        )
         products: list[Product] = []
-        for raw in self._as_rows(data):
+        for raw in raw_rows:
             try:
-                products.append(map_product(raw))
+                products.append(
+                    self._map_product_row(raw, stock_by_product=stock_by_product)
+                )
             except (ValueError, TypeError, KeyError) as exc:
                 logger.warning("skip bad supabase product row: %s", exc)
         return products
@@ -160,7 +239,8 @@ class SupabaseStoreClient:
         )
         if not rows:
             return None
-        return map_product(rows[0])
+        stock_by_product = self._fetch_stock_by_product([product_id])
+        return self._map_product_row(rows[0], stock_by_product=stock_by_product)
 
     def get_usual_order(self, user_id: str) -> UsualOrderResponse:
         params: dict[str, Any] = {

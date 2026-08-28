@@ -40,7 +40,9 @@ TOOL_DEFINITIONS: list[dict] = [
         "function": {
             "name": "create_proposal_from_usual",
             "description": (
-                "Create a checkout proposal from the user's usual order. "
+                "Create a checkout proposal from the user's most recent completed "
+                "order. If none exists, create a separately labeled bestseller "
+                "proposal instead; never describe that proposal as the user's usual. "
                 "Includes optional growth add-on offer if within budget. "
                 "Does NOT charge payment — user must confirm separately."
             ),

@@ -7,7 +7,7 @@ from typing import Any
 from backend.models import ComplementRef, LineItem, Product, UsualOrderResponse
 
 
-def map_product(raw: dict[str, Any]) -> Product:
+def map_product(raw: dict[str, Any], *, default_stock: int = 0) -> Product:
     """Normalize common merchant product shapes into Product."""
     pid = str(
         raw.get("id")
@@ -46,7 +46,15 @@ def map_product(raw: dict[str, Any]) -> Product:
         stock = raw.get("inventory")
     if stock is None:
         stock = raw.get("quantity")
-    stock = int(stock if stock is not None else 0)
+    stock = int(stock if stock is not None else default_stock)
+
+    badge = str(raw.get("badge") or "").strip().upper()
+    raw_tags = list(raw.get("tags") or [])
+    is_bestseller = bool(
+        raw.get("is_bestseller")
+        or badge == "BESTSELLER"
+        or any(str(tag).strip().lower() == "bestseller" for tag in raw_tags)
+    )
 
     return Product(
         id=pid,
@@ -54,9 +62,14 @@ def map_product(raw: dict[str, Any]) -> Product:
         price_inr=price_inr,
         category=str(raw.get("category") or raw.get("product_type") or "uncategorized"),
         stock=stock,
-        tags=list(raw.get("tags") or []),
+        tags=raw_tags,
         complements=complements,
         substitute_with=raw.get("substitute_with") or raw.get("substitute_product_id"),
+        is_bestseller=is_bestseller,
+        bestseller_rank=raw.get("bestseller_rank"),
+        sales_count=int(raw.get("sales_count") or raw.get("sold_count") or 0),
+        rating=float(raw.get("rating") or 0),
+        review_count=int(raw.get("review_count") or 0),
     )
 
 
@@ -79,7 +92,12 @@ def map_usual_order(user_id: str, raw: dict[str, Any]) -> UsualOrderResponse:
         if unit is None:
             unit = it.get("price") or it.get("unit_price") or 0
         unit = int(unit)
-        name = str(it.get("name") or it.get("title") or product_id)
+        name = str(
+            it.get("name")
+            or it.get("product_name")
+            or it.get("title")
+            or product_id
+        )
         items.append(
             LineItem(
                 product_id=product_id,

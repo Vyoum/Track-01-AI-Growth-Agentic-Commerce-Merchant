@@ -71,6 +71,8 @@ def _proposal_tool_result(proposal) -> dict[str, Any]:
         "stated_budget_inr": proposal.stated_budget_inr,
         "items": [i.model_dump() for i in proposal.items],
         "line_summary": proposal.line_summary,
+        "proposal_source": proposal.proposal_source,
+        "source_reason": proposal.source_reason,
     }
     if proposal.growth_offer:
         out["growth_offer"] = {

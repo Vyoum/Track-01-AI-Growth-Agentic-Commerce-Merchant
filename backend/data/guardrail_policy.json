@@ -42,6 +42,21 @@
       "realized_paid_uplift"
     ]
   },
+  "bestsellers": {
+    "max_items": 2,
+    "fallback_ranked_product_ids": [
+      "prod_protein_bundle",
+      "prod_shaker",
+      "prod_protein_bar"
+    ],
+    "rank_by": [
+      "bestseller_badge",
+      "bestseller_rank",
+      "sales_count",
+      "review_count",
+      "rating"
+    ]
+  },
   "acceptance_criteria": [
     "No Razorpay call before explicit payment confirmation of exact proposal_id + total",
     "Recommendations are optional and explained; never silent upsell",

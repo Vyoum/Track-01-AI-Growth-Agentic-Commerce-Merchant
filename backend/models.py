@@ -44,6 +44,11 @@ class Product(BaseModel):
     tags: list[str] = Field(default_factory=list)
     complements: list[ComplementRef] = Field(default_factory=list)
     substitute_with: str | None = None
+    is_bestseller: bool = False
+    bestseller_rank: int | None = None
+    sales_count: int = 0
+    rating: float = 0
+    review_count: int = 0
 
     @field_validator("price_inr")
     @classmethod
@@ -145,6 +150,8 @@ class Proposal(BaseModel):
     growth_offer: GrowthOffer | None = None
     growth_metrics: GrowthMetrics | None = None
     rejected_addon_ids: list[str] = Field(default_factory=list)
+    proposal_source: str = "requested_products"
+    source_reason: str = "based on products you requested"
 
     @property
     def line_summary(self) -> str:

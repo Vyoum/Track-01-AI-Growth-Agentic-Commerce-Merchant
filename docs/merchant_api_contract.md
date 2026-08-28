@@ -39,8 +39,19 @@ Authorization: Bearer {SUPABASE_KEY}
 - `name` (`title`)
 - `price_inr` (`price`; or `price_paise / 100`)
 - `category` (`product_type`)
-- `stock` (`inventory`, `quantity`)
+- `stock` — derived from `inventory.quantity - reserved_quantity` summed by `product_id`
 - `tags[]`, `complements[]` (optional JSON)
+
+**Inventory table** (live merchant):
+
+```bash
+SUPABASE_INVENTORY_TABLE=inventory
+SUPABASE_INVENTORY_PRODUCT_COLUMN=product_id
+SUPABASE_INVENTORY_QUANTITY_COLUMN=quantity
+SUPABASE_INVENTORY_RESERVED_COLUMN=reserved_quantity
+```
+
+Stock is aggregated across size/SKU rows per product. A product with no inventory rows is treated as out of stock.
 
 **Order row fields:**
 

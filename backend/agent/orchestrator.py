@@ -47,10 +47,14 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
             return {"reply": f"Sorry, I couldn't build that order: {result['error']}"}
         session["proposal_id"] = result["proposal_id"]
         if result.get("growth_offer"):
-            reply = result["growth_offer"]["offer_text"]
+            reply = (
+                f"{result['source_reason']}. "
+                f"{result['growth_offer']['offer_text']}"
+            )
         else:
             reply = (
-                f"I found your usual for ₹{result['total_inr']}. "
+                f"{result['source_reason'].capitalize()}: "
+                f"{result['line_summary']} for ₹{result['total_inr']}. "
                 "Say 'confirm payment' when you're ready."
             )
         return {"reply": reply, "proposal_id": result["proposal_id"], "tool_used": "fallback"}

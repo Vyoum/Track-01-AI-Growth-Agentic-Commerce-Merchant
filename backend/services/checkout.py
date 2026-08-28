@@ -26,10 +26,15 @@ from backend.models import (
     VerifyPaymentRequest,
 )
 from backend.services.cart import build_line_item
+from backend.services.bestsellers import (
+    BESTSELLER_REASON,
+    USUAL_UNAVAILABLE_REASON,
+    get_bestseller_seed,
+)
 from backend.services.data_loader import load_policy
 from backend.services.growth import recommend_addon
 from backend.services.history import get_usual_order
-from backend.services import store
+from backend.services import catalog, store
 from backend.services.validation import validate_cart
 
 
@@ -83,11 +88,61 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
     quantities = dict(req.quantities)
     reasons: dict[str, str] = {}
     protect: set[str] = set()
+    proposal_source = "requested_products"
+    source_reason = "based on products you requested"
 
     if req.use_usual:
         usual = get_usual_order(req.user_id)
+        unavailable_usual_ids = [
+            item.product_id
+            for item in usual.items
+            if (
+                (product := catalog.get_product(item.product_id)) is None
+                or product.stock < item.qty
+            )
+        ]
+        if unavailable_usual_ids:
+            usual = get_bestseller_seed(
+                req.user_id,
+                stated_budget_inr=req.stated_budget_inr,
+                reason=USUAL_UNAVAILABLE_REASON,
+                exclude_product_ids=set(unavailable_usual_ids),
+            )
+            proposal_source = "bestsellers"
+            source_reason = USUAL_UNAVAILABLE_REASON
+        elif not usual.items:
+            usual = get_bestseller_seed(
+                req.user_id,
+                stated_budget_inr=req.stated_budget_inr,
+            )
+            proposal_source = "bestsellers"
+            source_reason = BESTSELLER_REASON
+            if not usual.items:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        "No completed order history or in-stock bestsellers "
+                        "fit the stated budget"
+                    ),
+                )
+        else:
+            proposal_source = "completed_order_history"
+            source_reason = "based on your last completed order"
         if not usual.items:
-            raise HTTPException(status_code=404, detail="No usual order found for user")
+            raise HTTPException(
+                status_code=404,
+                detail="No in-stock bestsellers fit the stated budget",
+            )
+        log_event(
+            "proposal_source_selected",
+            user_id=req.user_id,
+            session_id=req.session_id,
+            payload={
+                "proposal_source": proposal_source,
+                "source_reason": source_reason,
+                "unavailable_usual_product_ids": unavailable_usual_ids,
+            },
+        )
         for item in usual.items:
             if item.product_id not in product_ids:
                 product_ids.append(item.product_id)
@@ -162,6 +217,8 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
         created_at=now,
         expires_at=now + timedelta(seconds=ttl),
         baseline_total_inr=guarded.cart.total_inr,
+        proposal_source=proposal_source,
+        source_reason=source_reason,
     )
     store.save_proposal(proposal)
     log_event(
@@ -173,11 +230,13 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
             "total_inr": proposal.total_inr,
             "items": [i.model_dump() for i in proposal.items],
             "reasons": proposal.reasons,
+            "proposal_source": proposal.proposal_source,
+            "source_reason": proposal.source_reason,
             "expires_at": proposal.expires_at.isoformat(),
         },
     )
 
-    if req.with_growth:
+    if req.with_growth and proposal.proposal_source != "bestsellers":
         proposal = _attach_growth(proposal)
     return proposal
 

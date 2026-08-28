@@ -85,6 +85,26 @@ class Settings(BaseSettings):
         default="id",
         alias="SUPABASE_PRODUCT_ID_COLUMN",
     )
+    supabase_inventory_table: str = Field(
+        default="inventory",
+        alias="SUPABASE_INVENTORY_TABLE",
+    )
+    supabase_inventory_product_column: str = Field(
+        default="product_id",
+        alias="SUPABASE_INVENTORY_PRODUCT_COLUMN",
+    )
+    supabase_inventory_quantity_column: str = Field(
+        default="quantity",
+        alias="SUPABASE_INVENTORY_QUANTITY_COLUMN",
+    )
+    supabase_inventory_reserved_column: str = Field(
+        default="reserved_quantity",
+        alias="SUPABASE_INVENTORY_RESERVED_COLUMN",
+    )
+    supabase_default_stock: int = Field(
+        default=0,
+        alias="SUPABASE_DEFAULT_STOCK",
+    )
 
     # Groq (OpenAI-compatible) for Pointer 8 agent + tool calling
     llm_provider: str = Field(default="groq", alias="LLM_PROVIDER")

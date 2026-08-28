@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -53,14 +55,17 @@ def test_mapper() -> None:
 
 
 def test_mock_source() -> None:
+    with patch.dict(os.environ, {"USE_MOCK_CATALOG": "true"}):
+        get_settings.cache_clear()
+        reset_store_client()
+        assert store_source.source_label() == "mock_json"
+        products = store_source.search_products("protein")
+        assert products
+        usual = store_source.get_usual_order("demo_user_01")
+        assert usual.total_inr == 699
+        print("mock source ok:", usual.order_id)
     get_settings.cache_clear()
     reset_store_client()
-    assert store_source.source_label() == "mock_json"
-    products = store_source.search_products("protein")
-    assert products
-    usual = store_source.get_usual_order("demo_user_01")
-    assert usual.total_inr == 699
-    print("mock source ok:", usual.order_id)
 
 
 def test_http_adapter_against_merchant_mock() -> None:
@@ -87,6 +92,7 @@ def test_http_adapter_against_merchant_mock() -> None:
     assert store.configured is True
     products = store.list_products(query="protein")
     assert any(p.id == "prod_protein_bundle" for p in products)
+    assert all(p.stock >= 0 for p in products)
     product = store.get_product("prod_shaker")
     assert product is not None and product.price_inr == 99
     usual = store.get_usual_order("demo_user_01")
