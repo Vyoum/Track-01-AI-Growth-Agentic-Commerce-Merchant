@@ -17,6 +17,7 @@ from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.client_store_client import ClientStoreClient, reset_store_client
 from backend.integrations.store_mapper import map_product, map_usual_order
+from backend.integrations.supabase_store_client import SupabaseStoreClient
 from backend.main import app
 from backend.services import store_source
 
@@ -93,10 +94,77 @@ def test_http_adapter_against_merchant_mock() -> None:
     print("http adapter ok:", usual.order_id, "products=", len(products))
 
 
+def test_supabase_postgrest_headers_and_paths() -> None:
+    init_db()
+    asgi = TestClient(app)
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        path = request.url.path.removeprefix("/rest/v1")
+        if not path.startswith("/"):
+            path = "/" + path.lstrip("/")
+        if path == "/products":
+            return httpx.Response(
+                200,
+                json=[{"id": "prod_protein_bundle", "name": "Protein", "price_inr": 699, "stock": 1}],
+            )
+        if path == "/orders":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "ord_1",
+                        "user_id": "demo_user_01",
+                        "total_inr": 699,
+                        "order_items": [
+                            {
+                                "product_id": "prod_protein_bundle",
+                                "name": "Protein",
+                                "qty": 1,
+                                "unit_price_inr": 699,
+                            }
+                        ],
+                    }
+                ],
+            )
+        # Replay against merchant-mock for fallback shape checks
+        resp = asgi.get(f"/merchant-mock{path}")
+        return httpx.Response(resp.status_code, json=resp.json())
+
+    from backend.config import Settings
+
+    settings = Settings(
+        USE_MOCK_CATALOG=False,
+        STORE_PROVIDER="supabase",
+        SUPABASE_URL="https://example.supabase.co",
+        SUPABASE_KEY="test_service_role_key",
+    )
+    store = SupabaseStoreClient(
+        settings=settings,
+        transport=httpx.MockTransport(handler),
+    )
+    assert store.configured is True
+    headers = store._headers()
+    assert headers["apikey"] == "test_service_role_key"
+    assert headers["Authorization"] == "Bearer test_service_role_key"
+
+    products = store.list_products(query="protein")
+    assert products[0].price_inr == 699
+    usual = store.get_usual_order("demo_user_01")
+    assert usual.total_inr == 699
+
+    assert captured
+    assert captured[0].url.path.endswith("/rest/v1/products")
+    assert "apikey" in captured[0].headers
+    print("supabase adapter ok:", usual.order_id, "requests=", len(captured))
+
+
 def main() -> None:
     test_mapper()
     test_mock_source()
     test_http_adapter_against_merchant_mock()
+    test_supabase_postgrest_headers_and_paths()
     print(json.dumps({"status": "pointer9_merchant_adapter_smoke_passed"}, indent=2))
 
 

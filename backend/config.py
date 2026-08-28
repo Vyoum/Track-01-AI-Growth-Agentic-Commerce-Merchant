@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     demo_user_id: str = Field(default="demo_user_01", alias="DEMO_USER_ID")
     use_mock_catalog: bool = Field(default=True, alias="USE_MOCK_CATALOG")
 
-    # Merchant e-commerce API (Pointer 9). Empty base URL → mock JSON.
+    # Merchant store source: mock | rest | supabase
+    store_provider: str = Field(default="", alias="STORE_PROVIDER")
+    # REST merchant API (Pointer 9). Empty base URL → mock JSON unless Supabase set.
     store_api_base_url: str = Field(default="", alias="STORE_API_BASE_URL")
     store_api_key: str = Field(default="", alias="STORE_API_KEY")
     store_api_timeout_seconds: float = Field(default=8.0, alias="STORE_API_TIMEOUT_SECONDS")
@@ -49,6 +51,39 @@ class Settings(BaseSettings):
     store_usual_order_path: str = Field(
         default="/customers/{user_id}/orders/latest",
         alias="STORE_USUAL_ORDER_PATH",
+    )
+    # Supabase PostgREST (live merchant DB). Backend-only — use service role key.
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    supabase_key: str = Field(default="", alias="SUPABASE_KEY")
+    supabase_products_table: str = Field(default="products", alias="SUPABASE_PRODUCTS_TABLE")
+    supabase_orders_table: str = Field(default="orders", alias="SUPABASE_ORDERS_TABLE")
+    supabase_order_items_table: str = Field(
+        default="order_items",
+        alias="SUPABASE_ORDER_ITEMS_TABLE",
+    )
+    supabase_order_items_fk: str = Field(
+        default="order_id",
+        alias="SUPABASE_ORDER_ITEMS_FK",
+    )
+    supabase_order_user_column: str = Field(
+        default="user_id",
+        alias="SUPABASE_ORDER_USER_COLUMN",
+    )
+    supabase_order_status_column: str = Field(
+        default="status",
+        alias="SUPABASE_ORDER_STATUS_COLUMN",
+    )
+    supabase_order_completed_status: str = Field(
+        default="completed",
+        alias="SUPABASE_ORDER_COMPLETED_STATUS",
+    )
+    supabase_order_date_column: str = Field(
+        default="created_at",
+        alias="SUPABASE_ORDER_DATE_COLUMN",
+    )
+    supabase_product_id_column: str = Field(
+        default="id",
+        alias="SUPABASE_PRODUCT_ID_COLUMN",
     )
 
     # Groq (OpenAI-compatible) for Pointer 8 agent + tool calling
@@ -110,6 +145,28 @@ class Settings(BaseSettings):
     def effective_llm_api_key(self) -> str:
         """Groq key preferred; LLM_API_KEY kept for backward compatibility."""
         return (self.groq_api_key or self.llm_api_key or "").strip()
+
+    @property
+    def effective_supabase_url(self) -> str:
+        return (self.supabase_url or self.store_api_base_url or "").strip()
+
+    @property
+    def effective_supabase_key(self) -> str:
+        return (self.supabase_key or self.store_api_key or "").strip()
+
+    @property
+    def resolved_store_provider(self) -> str:
+        explicit = (self.store_provider or "").strip().lower()
+        if explicit in {"mock", "rest", "supabase"}:
+            return explicit
+        if self.use_mock_catalog:
+            return "mock"
+        if self.effective_supabase_url and self.effective_supabase_key:
+            if "supabase.co" in self.effective_supabase_url.lower():
+                return "supabase"
+        if self.store_api_base_url.strip():
+            return "rest"
+        return "mock"
 
     @property
     def sqlite_path(self) -> Path:

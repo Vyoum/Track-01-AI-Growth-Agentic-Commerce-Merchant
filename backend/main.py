@@ -62,7 +62,12 @@ def health() -> dict:
         "razorpay_mode": settings.razorpay_mode,
         "use_mock_catalog": settings.use_mock_catalog,
         "catalog_source": store_source.source_label(),
+        "store_provider": settings.resolved_store_provider,
         "store_api_configured": bool(settings.store_api_base_url.strip()),
+        "supabase_configured": bool(
+            settings.effective_supabase_url.strip()
+            and settings.effective_supabase_key.strip()
+        ),
         "demo_user_id": settings.demo_user_id,
         "db_path": getattr(app.state, "db_path", None),
         "started_at": getattr(app.state, "started_at", None),

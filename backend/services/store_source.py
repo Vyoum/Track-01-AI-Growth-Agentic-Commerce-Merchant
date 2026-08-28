@@ -20,6 +20,12 @@ def use_merchant_api() -> bool:
     settings = get_settings()
     if settings.use_mock_catalog:
         return False
+    provider = settings.resolved_store_provider
+    if provider == "supabase":
+        return bool(
+            settings.effective_supabase_url.strip()
+            and settings.effective_supabase_key.strip()
+        )
     return bool(settings.store_api_base_url.strip())
 
 
@@ -171,6 +177,9 @@ def _local_usual(user_id: str) -> UsualOrderResponse:
 
 
 def source_label() -> str:
-    if use_merchant_api():
-        return "merchant_api"
-    return "mock_json"
+    settings = get_settings()
+    if not use_merchant_api():
+        return "mock_json"
+    if settings.resolved_store_provider == "supabase":
+        return "supabase"
+    return "merchant_api"

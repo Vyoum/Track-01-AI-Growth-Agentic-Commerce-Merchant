@@ -70,7 +70,7 @@ def map_usual_order(user_id: str, raw: dict[str, Any]) -> UsualOrderResponse:
         orders = raw["orders"]
         order = max(orders, key=lambda o: o.get("created_at") or o.get("date") or "")
 
-    items_raw = order.get("items") or order.get("line_items") or []
+    items_raw = order.get("items") or order.get("line_items") or order.get("order_items") or []
     items: list[LineItem] = []
     for it in items_raw:
         product_id = str(it.get("product_id") or it.get("id") or it.get("sku") or "")

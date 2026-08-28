@@ -60,16 +60,37 @@ Razorpay AI Buildathon: AI Growth & Agentic Commerce (merchant demo, **Razorpay 
 2. Open http://127.0.0.1:5173
 3. Chat: `Order my usual, under ₹800` → `yes, add it` → `confirm payment`
 
-- **Pointer 9** — Merchant store adapter (mock by default; live HTTP when configured)
+- **Pointer 9** — Merchant store adapter (mock by default; Supabase PostgREST or REST when configured)
 
 ### Merchant adapter (Pointer 9)
 
 Default: `USE_MOCK_CATALOG=true` (local JSON).
 
-To exercise the live HTTP adapter against this app’s mock merchant API:
+**Supabase (merchant live DB):**
 
 ```bash
 USE_MOCK_CATALOG=false
+STORE_PROVIDER=supabase
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=your_service_role_key
+DEMO_USER_ID=<merchant customer id>
+STORE_FALLBACK_TO_MOCK=true
+```
+
+**Custom REST API:**
+
+```bash
+USE_MOCK_CATALOG=false
+STORE_PROVIDER=rest
+STORE_API_BASE_URL=https://api.merchant.com/v1
+STORE_FALLBACK_TO_MOCK=true
+```
+
+To exercise the REST adapter against this app’s mock merchant API:
+
+```bash
+USE_MOCK_CATALOG=false
+STORE_PROVIDER=rest
 STORE_API_BASE_URL=http://127.0.0.1:8000/merchant-mock
 STORE_FALLBACK_TO_MOCK=true
 ```

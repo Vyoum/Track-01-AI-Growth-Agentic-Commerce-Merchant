@@ -146,15 +146,26 @@ class ClientStoreClient:
 
 
 _client: ClientStoreClient | None = None
+_supabase_client = None
 
 
-def get_store_client() -> ClientStoreClient:
-    global _client
+def get_store_client():
+    """Return REST or Supabase store client based on settings."""
+    global _client, _supabase_client
+    settings = get_settings()
+    provider = settings.resolved_store_provider
+    if provider == "supabase":
+        if _supabase_client is None:
+            from backend.integrations.supabase_store_client import SupabaseStoreClient
+
+            _supabase_client = SupabaseStoreClient(settings=settings)
+        return _supabase_client
     if _client is None:
-        _client = ClientStoreClient()
+        _client = ClientStoreClient(settings=settings)
     return _client
 
 
 def reset_store_client() -> None:
-    global _client
+    global _client, _supabase_client
     _client = None
+    _supabase_client = None
