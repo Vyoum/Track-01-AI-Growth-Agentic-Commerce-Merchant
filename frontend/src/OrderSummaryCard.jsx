@@ -28,7 +28,14 @@ export default function OrderSummaryCard({
     try {
       const p = await createUsualProposal(800);
       setProposal(p);
-      setMessage(p.growth_offer?.offer_text || "Proposal ready");
+      if (p.status === "awaiting_merchant_approval") {
+        setMessage(
+          `Campaign pending merchant approval: ${p.campaign_decision?.campaign_id || "—"}. ` +
+            "Use Merchant Desk to Approve."
+        );
+      } else {
+        setMessage(p.growth_offer?.offer_text || "Proposal ready");
+      }
     } catch (err) {
       setMessage(err.message);
     } finally {

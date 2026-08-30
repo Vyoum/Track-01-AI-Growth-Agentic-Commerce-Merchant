@@ -303,6 +303,76 @@ def build_guardrail_checks(
     return checks
 
 
+def build_campaign_checks(proposal: Proposal) -> list[DecisionCheck]:
+    """Campaign orchestrator + merchant approval checks for the decision trace."""
+    camp = proposal.campaign_decision
+    if camp is None:
+        return [
+            DecisionCheck(
+                id="campaign_evaluated",
+                label="Campaign orchestrator",
+                status="skip",
+                reason="No campaign attached to this proposal",
+                phase="campaign",
+            )
+        ]
+
+    checks: list[DecisionCheck] = [
+        DecisionCheck(
+            id="opportunity_detected",
+            label="Opportunity detected",
+            status="pass",
+            reason=f"{camp.opportunity} → campaign {camp.campaign_id}",
+            phase="campaign",
+            data={
+                "opportunity": camp.opportunity,
+                "campaign_id": camp.campaign_id,
+                "target_segment": camp.target_segment,
+            },
+        ),
+        DecisionCheck(
+            id="campaign_guardrails",
+            label="Campaign guardrails",
+            status="pass" if camp.guardrail_passed else "fail",
+            reason="; ".join(camp.guardrail_notes) or "Evaluated",
+            phase="campaign",
+        ),
+    ]
+
+    status = camp.merchant_approval_status
+    if status == "pending":
+        checks.append(
+            DecisionCheck(
+                id="merchant_approval_pending",
+                label="Merchant approval",
+                status="info",
+                reason="Awaiting explicit merchant approve/reject",
+                phase="campaign",
+            )
+        )
+    elif status == "approved":
+        checks.append(
+            DecisionCheck(
+                id="merchant_approval",
+                label="Merchant approval",
+                status="pass",
+                reason=f"Merchant approved {camp.campaign_id}",
+                phase="campaign",
+            )
+        )
+    elif status == "rejected":
+        checks.append(
+            DecisionCheck(
+                id="merchant_approval",
+                label="Merchant approval",
+                status="pass",
+                reason="Merchant rejected — baseline only",
+                phase="campaign",
+            )
+        )
+    return checks
+
+
 def build_payment_gate_checks(
     *,
     proposal: Proposal,
@@ -319,6 +389,16 @@ def build_payment_gate_checks(
                 label="Add-on resolved before payment",
                 status="fail",
                 reason="User must accept or skip the add-on offer first",
+                phase="gate",
+            )
+        )
+    elif proposal.status == ProposalStatus.AWAITING_MERCHANT_APPROVAL:
+        checks.append(
+            DecisionCheck(
+                id="addon_gate",
+                label="Add-on resolved before payment",
+                status="fail",
+                reason="Merchant must approve the campaign before customer addon decision",
                 phase="gate",
             )
         )

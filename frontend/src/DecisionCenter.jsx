@@ -52,6 +52,18 @@ export default function DecisionCenter({
         )}
       </div>
 
+      {view.campaign && (
+        <div className="dc-block">
+          <h3>OPPORTUNITY</h3>
+          <p className="dc-amount">{view.campaign.opportunity}</p>
+          <p className="dc-meta">
+            Campaign: {view.campaign.campaignName} ({view.campaign.campaignId})
+          </p>
+          <p className="dc-meta">Segment: {view.campaign.segment}</p>
+          <p className="dc-meta">Copy key: {view.campaign.copyKey}</p>
+        </div>
+      )}
+
       {view.growth && (
         <div className="dc-block">
           <h3>GROWTH</h3>
@@ -87,6 +99,16 @@ export default function DecisionCenter({
           ))}
         </dl>
       </div>
+
+      {view.merchantApproval && (
+        <div className="dc-block">
+          <h3>MERCHANT APPROVAL</h3>
+          <p className="dc-approval">
+            {view.merchantApproval.startsWith("Explicitly") ? "✓ " : ""}
+            {view.merchantApproval}
+          </p>
+        </div>
+      )}
 
       <div className="dc-block">
         <h3>USER APPROVAL</h3>

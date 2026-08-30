@@ -96,6 +96,8 @@ def meta() -> dict:
             "chat": True,
             "agent": bool(settings.effective_llm_api_key),
             "growth": True,
+            "campaigns": True,
+            "merchant_approval": True,
             "checkout_core": True,
             "razorpay": True,
             "razorpay_test_ready": razorpay_ready,
@@ -108,5 +110,6 @@ def meta() -> dict:
                 if settings.effective_llm_api_key
                 else "Add GROQ_API_KEY for full chat; gates + fallback still work."
             )
+            + " Growth campaigns require merchant approval before customer offer."
         ),
     }

@@ -83,6 +83,20 @@ def save_payment(payment: PaymentRecord) -> None:
         conn.commit()
 
 
+def list_proposals_by_status(status: ProposalStatus, limit: int = 50) -> list[Proposal]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT payload_json FROM proposals
+            WHERE status = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (status.value, limit),
+        ).fetchall()
+    return [Proposal.model_validate(json.loads(r["payload_json"])) for r in rows]
+
+
 def get_payment_by_proposal(proposal_id: str) -> PaymentRecord | None:
     with connect() as conn:
         row = conn.execute(

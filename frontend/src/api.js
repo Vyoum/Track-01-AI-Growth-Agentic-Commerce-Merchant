@@ -59,6 +59,17 @@ export function decideAddon(proposalId, decision, productId) {
   });
 }
 
+export function decideCampaign(proposalId, decision, note) {
+  return postJson(`/api/proposals/${proposalId}/campaign/decide`, {
+    decision,
+    note: note || undefined,
+  });
+}
+
+export function fetchPendingCampaigns() {
+  return getJson("/api/merchant/campaigns/pending");
+}
+
 export function confirmProposal(proposalId, expectedTotalInr) {
   return postJson(`/api/proposals/${proposalId}/confirm`, {
     expected_total_inr: expectedTotalInr,

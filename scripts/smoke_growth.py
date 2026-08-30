@@ -14,12 +14,24 @@ sys.path.insert(0, str(ROOT))
 from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.razorpay_client import keys_are_usable
-from backend.models import AddonDecisionRequest, ConfirmationRequest, CreateProposalRequest
+from backend.models import (
+    AddonDecisionRequest,
+    ConfirmationRequest,
+    CreateProposalRequest,
+    MerchantApprovalRequest,
+)
 from backend.services import checkout
 
 
 def _demo_user_id() -> str:
     return get_settings().demo_user_id
+
+
+def _approve_campaign(proposal_id: str):
+    return checkout.decide_merchant_campaign(
+        proposal_id,
+        MerchantApprovalRequest(decision="approve", note="smoke auto-approve"),
+    )
 
 
 def main() -> None:
@@ -47,6 +59,15 @@ def main() -> None:
     projected_total = offer.projected_total_inr
     uplift = offer.uplift_amount_inr
 
+    assert proposal.status.value == "awaiting_merchant_approval", proposal.status.value
+    assert proposal.campaign_decision is not None
+    print(
+        "campaign ok:",
+        proposal.campaign_decision.campaign_id,
+        proposal.campaign_decision.opportunity,
+    )
+
+    proposal = _approve_campaign(proposal.id)
     assert proposal.status.value == "awaiting_addon_decision"
     assert offer.product_id
     assert projected_total == baseline + uplift
@@ -119,6 +140,8 @@ def main() -> None:
         )
     )
     assert skip_prop.growth_offer is not None
+    assert skip_prop.status.value == "awaiting_merchant_approval"
+    skip_prop = _approve_campaign(skip_prop.id)
     skipped = checkout.decide_addon(skip_prop.id, AddonDecisionRequest(decision="skip"))
     assert skipped.total_inr == skip_prop.total_inr
     assert skipped.growth_metrics.recommendation_declined is True
@@ -132,6 +155,9 @@ def main() -> None:
                 "baseline_inr": baseline,
                 "projected_total_inr": projected_total,
                 "uplift_inr": uplift,
+                "campaign_id": proposal.campaign_decision.campaign_id
+                if proposal.campaign_decision
+                else None,
             },
             indent=2,
         )

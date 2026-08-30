@@ -19,6 +19,7 @@ from backend.models import (
     ConfirmationRequest,
     CreateProposalRequest,
     FailPaymentRequest,
+    MerchantApprovalRequest,
     VerifyPaymentRequest,
 )
 from backend.services import checkout
@@ -52,6 +53,12 @@ def main() -> None:
     offer = proposal.growth_offer
     projected_total = offer.projected_total_inr
     uplift = offer.uplift_amount_inr
+
+    assert proposal.status.value == "awaiting_merchant_approval"
+    proposal = checkout.decide_merchant_campaign(
+        proposal.id,
+        MerchantApprovalRequest(decision="approve", note="razorpay smoke"),
+    )
 
     proposal = checkout.decide_addon(
         proposal.id,

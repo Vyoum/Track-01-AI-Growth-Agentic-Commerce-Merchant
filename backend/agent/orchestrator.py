@@ -46,7 +46,14 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
         if "error" in result:
             return {"reply": f"Sorry, I couldn't build that order: {result['error']}"}
         session["proposal_id"] = result["proposal_id"]
-        if result.get("growth_offer"):
+        if result.get("status") == "awaiting_merchant_approval":
+            camp = result.get("campaign") or {}
+            reply = (
+                f"{result['source_reason']}. "
+                f"A growth campaign ({camp.get('campaign_id', 'campaign')}) "
+                "is waiting for merchant approval before I can offer the add-on."
+            )
+        elif result.get("growth_offer"):
             reply = (
                 f"{result['source_reason']}. "
                 f"{result['growth_offer']['offer_text']}"

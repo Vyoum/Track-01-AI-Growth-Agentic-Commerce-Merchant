@@ -124,10 +124,24 @@ export function buildDecisionCenterView({
   let userApproval = "Pending";
   if (addonAccepted) userApproval = "Explicitly accepted";
   else if (addonSkipped) userApproval = "Explicitly skipped add-on";
-  else if (proposal?.status === "awaiting_addon_decision") {
+  else if (proposal?.status === "awaiting_merchant_approval") {
+    userApproval = "Waiting for merchant approval";
+  } else if (proposal?.status === "awaiting_addon_decision") {
     userApproval = "Awaiting add-on decision";
   } else if (paid || orderCreated) {
     userApproval = "Confirmed for payment";
+  }
+
+  const camp = proposal?.campaign_decision;
+  let merchantApproval = null;
+  if (camp) {
+    if (camp.merchant_approval_status === "approved") {
+      merchantApproval = "Explicitly approved";
+    } else if (camp.merchant_approval_status === "rejected") {
+      merchantApproval = "Explicitly rejected";
+    } else {
+      merchantApproval = "Pending merchant click";
+    }
   }
 
   return {
@@ -142,15 +156,28 @@ export function buildDecisionCenterView({
         (i) => !addonAccepted || i.reason?.includes("growth add-on") === false
       ) || proposal?.items,
     },
+    campaign: camp
+      ? {
+          opportunity: camp.opportunity,
+          campaignId: camp.campaign_id,
+          campaignName: camp.campaign_name,
+          segment: camp.target_segment,
+          copyKey: camp.copy_key,
+          rationale: camp.rationale || [],
+        }
+      : null,
     growth: addonInr > 0 || growthOffer
       ? {
           amount: addonAccepted ? addonInr : growthOffer?.price_inr || addonInr,
-          source: formatSource(growthSource),
-          name: growthOffer?.name,
+          source: formatSource(growthSource || camp?.offer?.source),
+          name: growthOffer?.name || camp?.offer?.name,
         }
       : null,
-    why: whyBullets,
+    why: whyBullets.length
+      ? whyBullets
+      : camp?.rationale?.slice(0, 4) || [],
     guardrails: guardrailRows,
+    merchantApproval,
     userApproval,
     payment: payment
       ? {

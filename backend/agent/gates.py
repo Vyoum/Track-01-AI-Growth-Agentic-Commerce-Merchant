@@ -67,6 +67,25 @@ def try_gate_action(
 
     gate = classify_user_gate_message(message)
 
+    if proposal.status == ProposalStatus.AWAITING_MERCHANT_APPROVAL:
+        if gate in {"addon_accept", "addon_skip", "payment_confirm"}:
+            camp = proposal.campaign_decision
+            return {
+                "handled_by": "merchant_gate",
+                "reply": (
+                    "A growth campaign is ready but needs merchant approval first. "
+                    + (
+                        f"Campaign: {camp.campaign_name} ({camp.opportunity}). "
+                        if camp
+                        else ""
+                    )
+                    + "Ask the merchant desk to Approve, then I can offer it to you."
+                ),
+                "proposal": proposal.model_dump(mode="json"),
+                "checkout": None,
+                "payment": None,
+            }
+
     if proposal.status == ProposalStatus.AWAITING_ADDON_DECISION:
         if gate == "addon_accept":
             updated = checkout.decide_addon(
@@ -161,6 +180,7 @@ def try_gate_action(
     if gate == "payment_cancel" and proposal.status in {
         ProposalStatus.AWAITING_CONFIRMATION,
         ProposalStatus.AWAITING_ADDON_DECISION,
+        ProposalStatus.AWAITING_MERCHANT_APPROVAL,
         ProposalStatus.PAYMENT_PENDING,
     }:
         cancelled = checkout.cancel_proposal(proposal_id)

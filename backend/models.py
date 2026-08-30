@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class ProposalStatus(str, Enum):
     DRAFT = "draft"
+    AWAITING_MERCHANT_APPROVAL = "awaiting_merchant_approval"
     AWAITING_ADDON_DECISION = "awaiting_addon_decision"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     CONFIRMED = "confirmed"
@@ -132,6 +133,41 @@ class GrowthMetrics(BaseModel):
     candidates_considered: int = 0
 
 
+class CampaignOfferSnapshot(BaseModel):
+    product_id: str
+    name: str
+    price_inr: int
+    reason: str
+    source: str
+    projected_total_inr: int
+    uplift_amount_inr: int
+    uplift_percent: float
+    category: str | None = None
+
+
+class CampaignDecision(BaseModel):
+    opportunity: str
+    campaign_id: str
+    campaign_name: str
+    target_segment: str
+    offer: CampaignOfferSnapshot
+    rationale: list[str] = Field(default_factory=list)
+    copy_key: str
+    copy_variants: list[str] = Field(default_factory=list)
+    customer_copy: str
+    discount_pct: float = 0
+    merchant_approval_status: str = "pending"  # pending | approved | rejected
+    merchant_approved_at: datetime | None = None
+    merchant_rejected_at: datetime | None = None
+    guardrail_passed: bool = True
+    guardrail_notes: list[str] = Field(default_factory=list)
+
+
+class MerchantApprovalRequest(BaseModel):
+    decision: str  # "approve" | "reject"
+    note: str | None = None
+
+
 class Proposal(BaseModel):
     id: str
     user_id: str
@@ -149,6 +185,7 @@ class Proposal(BaseModel):
     baseline_total_inr: int | None = None
     growth_offer: GrowthOffer | None = None
     growth_metrics: GrowthMetrics | None = None
+    campaign_decision: CampaignDecision | None = None
     rejected_addon_ids: list[str] = Field(default_factory=list)
     proposal_source: str = "requested_products"
     source_reason: str = "based on products you requested"

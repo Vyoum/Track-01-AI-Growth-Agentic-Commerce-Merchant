@@ -20,6 +20,7 @@ from backend.models import (
     AddonDecisionRequest,
     ConfirmationRequest,
     CreateProposalRequest,
+    MerchantApprovalRequest,
 )
 from backend.services import checkout
 
@@ -90,6 +91,26 @@ def main() -> None:
     offer = proposal.growth_offer
     projected_total = offer.projected_total_inr
 
+    assert proposal.status.value == "awaiting_merchant_approval", proposal.status.value
+    assert proposal.campaign_decision is not None
+    print(
+        f"campaign ok: {proposal.campaign_decision.campaign_id} "
+        f"({proposal.campaign_decision.opportunity})"
+    )
+
+    # Payment blocked before merchant approval
+    try:
+        assert_payment_confirmation_gate(proposal, expected_total_inr=baseline)
+        raise SystemExit("merchant gate should block")
+    except Exception as exc:
+        detail = getattr(exc, "detail", {})
+        assert isinstance(detail, dict) and detail.get("code") == "merchant_gate"
+        print("merchant_gate ok")
+
+    proposal = checkout.decide_merchant_campaign(
+        proposal.id,
+        MerchantApprovalRequest(decision="approve", note="smoke"),
+    )
     assert proposal.status.value == "awaiting_addon_decision"
     print(
         f"growth offer ok: {offer.product_id!r} ₹{offer.price_inr} "
@@ -137,6 +158,8 @@ def main() -> None:
 
     needed_audit = {
         "proposal_created",
+        "campaign_proposed",
+        "campaign_merchant_approved",
         "growth_offer_shown",
         "addon_accepted",
         "decision_trace",

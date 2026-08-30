@@ -17,7 +17,7 @@ from backend.agent.orchestrator import run_agent_turn
 from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.client_store_client import reset_store_client
-from backend.models import CreateProposalRequest
+from backend.models import CreateProposalRequest, MerchantApprovalRequest
 from backend.services import checkout
 
 
@@ -45,7 +45,7 @@ def test_gate_flow() -> None:
                 session_id=session_id,
             )
         )
-        assert p.status.value == "awaiting_addon_decision", p.status.value
+        assert p.status.value == "awaiting_merchant_approval", p.status.value
         assert p.proposal_source == "completed_order_history", p.proposal_source
 
         from backend.agent.session import get_or_create, save
@@ -53,6 +53,21 @@ def test_gate_flow() -> None:
         state = get_or_create(session_id, "demo_user_01")
         state["proposal_id"] = p.id
         save(state)
+
+        # Customer cannot accept before merchant approval
+        blocked = run_agent_turn(
+            message="yes, add it",
+            user_id="demo_user_01",
+            session_id=session_id,
+        )
+        assert blocked["handled_by"] == "merchant_gate"
+        print("merchant gate ok:", blocked["reply"][:80])
+
+        p = checkout.decide_merchant_campaign(
+            p.id,
+            MerchantApprovalRequest(decision="approve", note="agent smoke"),
+        )
+        assert p.status.value == "awaiting_addon_decision"
 
         r1 = run_agent_turn(
             message="yes, add it",
@@ -102,10 +117,14 @@ def test_groq_optional() -> None:
 
     if source == "completed_order_history":
         assert total == 699
-        assert status == "awaiting_addon_decision"
+        assert status in {"awaiting_merchant_approval", "awaiting_addon_decision"}
     elif source == "bestsellers":
         assert total > 0
-        assert status in {"awaiting_confirmation", "awaiting_addon_decision"}
+        assert status in {
+            "awaiting_confirmation",
+            "awaiting_addon_decision",
+            "awaiting_merchant_approval",
+        }
         assert proposal.get("source_reason")
     else:
         raise AssertionError(f"unexpected proposal_source: {source}")

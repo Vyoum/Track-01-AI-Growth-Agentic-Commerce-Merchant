@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ChatWindow from "./ChatWindow.jsx";
 import DecisionCenter from "./DecisionCenter.jsx";
+import MerchantDesk from "./MerchantDesk.jsx";
 import OrderSummaryCard from "./OrderSummaryCard.jsx";
 import { fetchMeta, fetchHealth, fetchProposalAudit } from "./api.js";
 
@@ -48,9 +49,11 @@ export default function App() {
   const showDecisionCenter =
     proposal &&
     (checkoutResult?.payment ||
+      proposal.status === "awaiting_merchant_approval" ||
       proposal.status === "awaiting_addon_decision" ||
       proposal.status === "awaiting_confirmation" ||
-      proposal.growth_offer);
+      proposal.growth_offer ||
+      proposal.campaign_decision);
 
   return (
     <div className="app">
@@ -84,6 +87,7 @@ export default function App() {
           }}
         />
         <div className="side-stack">
+          <MerchantDesk proposal={proposal} setProposal={setProposal} />
           <OrderSummaryCard
             proposal={proposal}
             setProposal={setProposal}

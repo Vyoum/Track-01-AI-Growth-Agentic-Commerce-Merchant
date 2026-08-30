@@ -7,6 +7,7 @@ from typing import Any
 from backend.agent.guardrails import GuardrailResult
 from backend.audit.checks import (
     DecisionCheck,
+    build_campaign_checks,
     build_growth_checks,
     build_guardrail_checks,
     build_history_checks,
@@ -47,6 +48,7 @@ def build_proposal_decision_trace(
     checks.extend(
         build_growth_checks(growth_result=growth_result, proposal=proposal)
     )
+    checks.extend(build_campaign_checks(proposal))
 
     summary = summarize_checks(checks)
     checks_narrative = format_checks_narrative(checks, summary)
@@ -54,6 +56,12 @@ def build_proposal_decision_trace(
     header_lines = ["DECISION TRACE"]
     if user_request_summary:
         header_lines.append(f'User request: "{user_request_summary}"')
+    if proposal.campaign_decision:
+        cd = proposal.campaign_decision
+        header_lines.append(
+            f"Campaign: {cd.campaign_id} ({cd.opportunity}) "
+            f"merchant={cd.merchant_approval_status}"
+        )
     header_lines.append("")
     narrative = "\n".join(header_lines) + "\n" + checks_narrative
 
@@ -61,6 +69,11 @@ def build_proposal_decision_trace(
         "title": "DECISION TRACE",
         "proposal_id": proposal.id,
         "user_request": user_request_summary,
+        "campaign_decision": (
+            proposal.campaign_decision.model_dump(mode="json")
+            if proposal.campaign_decision
+            else None
+        ),
         "checks": [c.to_dict() for c in checks],
         "summary": summary,
         "narrative": narrative,

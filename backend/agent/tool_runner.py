@@ -74,7 +74,28 @@ def _proposal_tool_result(proposal) -> dict[str, Any]:
         "proposal_source": proposal.proposal_source,
         "source_reason": proposal.source_reason,
     }
-    if proposal.growth_offer:
+    if proposal.campaign_decision:
+        cd = proposal.campaign_decision
+        out["campaign"] = {
+            "campaign_id": cd.campaign_id,
+            "opportunity": cd.opportunity,
+            "target_segment": cd.target_segment,
+            "merchant_approval_status": cd.merchant_approval_status,
+            "copy_key": cd.copy_key,
+        }
+    if proposal.status.value == "awaiting_merchant_approval":
+        out["next_step"] = (
+            "Campaign pending merchant approval. Tell user the merchant desk must "
+            "Approve before you can offer the add-on. Do NOT ask accept/skip yet."
+        )
+        if proposal.growth_offer:
+            out["growth_offer_pending"] = {
+                "product_id": proposal.growth_offer.product_id,
+                "name": proposal.growth_offer.name,
+                "price_inr": proposal.growth_offer.price_inr,
+                "projected_total_inr": proposal.growth_offer.projected_total_inr,
+            }
+    elif proposal.growth_offer and proposal.status.value == "awaiting_addon_decision":
         out["growth_offer"] = {
             "product_id": proposal.growth_offer.product_id,
             "name": proposal.growth_offer.name,

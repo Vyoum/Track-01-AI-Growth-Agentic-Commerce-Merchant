@@ -33,7 +33,13 @@ def load_policy() -> dict[str, Any]:
     return _read_json(DATA_DIR / "guardrail_policy.json")
 
 
+@lru_cache
+def load_campaigns() -> dict[str, Any]:
+    return _read_json(DATA_DIR / "campaigns.json")
+
+
 def reload_demo_data() -> None:
     load_catalog.cache_clear()
     load_demo_users.cache_clear()
     load_policy.cache_clear()
+    load_campaigns.cache_clear()

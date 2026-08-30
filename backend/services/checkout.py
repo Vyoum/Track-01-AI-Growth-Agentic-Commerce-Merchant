@@ -25,6 +25,7 @@ from backend.models import (
     ConfirmationRequest,
     CreateProposalRequest,
     FailPaymentRequest,
+    MerchantApprovalRequest,
     PaymentRecord,
     PaymentStatus,
     Proposal,
@@ -37,8 +38,9 @@ from backend.services.bestsellers import (
     USUAL_UNAVAILABLE_REASON,
     get_bestseller_seed,
 )
+from backend.services.campaign_orchestrator import orchestrate_campaign
 from backend.services.data_loader import load_policy
-from backend.services.growth import GrowthDecisionResult, recommend_addon
+from backend.services.growth import GrowthDecisionResult
 from backend.services.history import get_usual_order
 from backend.services import catalog, store
 from backend.services.validation import validate_cart
@@ -50,19 +52,45 @@ def _now() -> datetime:
 
 def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
     cart = Cart(user_id=proposal.user_id, items=list(proposal.items))
-    result = recommend_addon(
+    has_history = proposal.proposal_source == "completed_order_history"
+    orchestration = orchestrate_campaign(
         cart=cart,
         stated_budget_inr=proposal.stated_budget_inr,
         rejected_addon_ids=proposal.rejected_addon_ids,
         user_id=proposal.user_id,
         proposal_source=proposal.proposal_source,
         source_reason=proposal.source_reason,
+        has_order_history=has_history,
     )
+    result = orchestration.growth
     proposal.baseline_total_inr = proposal.total_inr
     proposal.growth_metrics = result.metrics
-    if result.offer:
+
+    if result.offer and orchestration.decision:
         proposal.growth_offer = result.offer
-        proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
+        proposal.campaign_decision = orchestration.decision
+        # Option A: merchant must explicitly approve before customer sees the offer.
+        proposal.status = ProposalStatus.AWAITING_MERCHANT_APPROVAL
+        log_event(
+            "campaign_proposed",
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            proposal_id=proposal.id,
+            payload={
+                "campaign_decision": orchestration.decision.model_dump(mode="json"),
+                "opportunities": [
+                    {
+                        "id": o.id,
+                        "label": o.label,
+                        "priority": o.priority,
+                        "rationale": o.rationale,
+                        "data": o.data,
+                    }
+                    for o in orchestration.opportunities
+                ],
+                "baseline_total_inr": proposal.total_inr,
+            },
+        )
         log_event(
             "growth_offer_shown",
             user_id=proposal.user_id,
@@ -72,10 +100,24 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
                 "offer": result.offer.model_dump(),
                 "baseline_total_inr": proposal.total_inr,
                 "candidates_considered": result.metrics.candidates_considered,
+                "pending_merchant_approval": True,
             },
+        )
+    elif result.offer:
+        # Offer without campaign match after guardrails — skip surfacing
+        proposal.growth_offer = None
+        proposal.campaign_decision = None
+        proposal.status = ProposalStatus.AWAITING_CONFIRMATION
+        log_event(
+            "campaign_skipped",
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            proposal_id=proposal.id,
+            payload={"skipped_reasons": orchestration.skipped_reasons},
         )
     else:
         proposal.growth_offer = None
+        proposal.campaign_decision = None
         proposal.status = ProposalStatus.AWAITING_CONFIRMATION
         log_event(
             "growth_offer_none",
@@ -86,6 +128,116 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
         )
     store.save_proposal(proposal)
     return proposal, result
+
+
+def decide_merchant_campaign(
+    proposal_id: str,
+    body: MerchantApprovalRequest,
+) -> Proposal:
+    """Merchant desk gate — distinct from customer addon accept/skip."""
+    proposal = get_proposal(proposal_id)
+    decision = (body.decision or "").strip().lower()
+    if decision not in {"approve", "reject"}:
+        raise HTTPException(status_code=400, detail="decision must be 'approve' or 'reject'")
+
+    if proposal.status == ProposalStatus.EXPIRED:
+        raise HTTPException(status_code=410, detail="Proposal expired")
+
+    if proposal.status != ProposalStatus.AWAITING_MERCHANT_APPROVAL:
+        raise HTTPException(
+            status_code=409,
+            detail=f"No pending merchant approval (status={proposal.status})",
+        )
+
+    if not proposal.campaign_decision or not proposal.growth_offer:
+        raise HTTPException(status_code=409, detail="No campaign pending approval")
+
+    now = _now()
+    camp = proposal.campaign_decision
+
+    if decision == "reject":
+        camp.merchant_approval_status = "rejected"
+        camp.merchant_rejected_at = now
+        proposal.campaign_decision = camp
+        proposal.growth_offer = None
+        if proposal.growth_metrics:
+            proposal.growth_metrics.recommendation_shown = False
+            proposal.growth_metrics.recommendation_declined = True
+            proposal.growth_metrics.recommendation_accepted = False
+        proposal.status = ProposalStatus.AWAITING_CONFIRMATION
+        store.save_proposal(proposal)
+        log_event(
+            "campaign_merchant_rejected",
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            proposal_id=proposal.id,
+            payload={
+                "campaign_id": camp.campaign_id,
+                "opportunity": camp.opportunity,
+                "note": body.note,
+            },
+        )
+        from backend.audit.checks import DecisionCheck
+
+        _log_gate_trace(
+            proposal=proposal,
+            checks=[
+                DecisionCheck(
+                    id="merchant_approval",
+                    label="Merchant campaign approval",
+                    status="pass",
+                    reason="Merchant rejected campaign — baseline cart only",
+                    phase="gate",
+                    data={"decision": "reject", "campaign_id": camp.campaign_id},
+                )
+            ],
+            gate_name="merchant_approval",
+        )
+        return proposal
+
+    # approve
+    camp.merchant_approval_status = "approved"
+    camp.merchant_approved_at = now
+    proposal.campaign_decision = camp
+    proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
+    store.save_proposal(proposal)
+    log_event(
+        "campaign_merchant_approved",
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        proposal_id=proposal.id,
+        payload={
+            "campaign_id": camp.campaign_id,
+            "opportunity": camp.opportunity,
+            "offer": camp.offer.model_dump(),
+            "customer_copy": camp.customer_copy,
+            "note": body.note,
+        },
+    )
+    from backend.audit.checks import DecisionCheck
+
+    _log_gate_trace(
+        proposal=proposal,
+        checks=[
+            DecisionCheck(
+                id="merchant_approval",
+                label="Merchant campaign approval",
+                status="pass",
+                reason=f"Merchant approved campaign {camp.campaign_id}",
+                phase="gate",
+                data={"decision": "approve", "campaign_id": camp.campaign_id},
+            )
+        ],
+        gate_name="merchant_approval",
+    )
+    return proposal
+
+
+def list_pending_merchant_approvals(limit: int = 50) -> list[Proposal]:
+    """Return proposals awaiting merchant campaign approval (newest first)."""
+    return store.list_proposals_by_status(
+        ProposalStatus.AWAITING_MERCHANT_APPROVAL, limit=limit
+    )
 
 
 def _user_request_summary(req: CreateProposalRequest) -> str | None:

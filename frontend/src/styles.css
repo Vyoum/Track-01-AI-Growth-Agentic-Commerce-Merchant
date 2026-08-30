@@ -87,6 +87,28 @@ h1 {
   min-height: unset;
 }
 
+.merchant-desk {
+  border-color: #4a6b3a;
+  background: color-mix(in srgb, #1a2818 90%, black);
+}
+
+.merchant-eyebrow {
+  margin: -4px 0 12px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a3c78a;
+}
+
+.merchant-copy {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid #3d9b6a;
+  color: #cfe6d8;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .decision-center {
   background: #0a0f0c;
   border: 1px solid #2f4a3a;

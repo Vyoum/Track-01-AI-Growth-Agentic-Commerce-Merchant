@@ -9,11 +9,13 @@ from backend.models import (
     ConfirmationRequest,
     CreateProposalRequest,
     FailPaymentRequest,
+    MerchantApprovalRequest,
     SearchProductsResponse,
     VerifyPaymentRequest,
 )
 from backend.audit.logger import list_events
 from backend.services import catalog, checkout, history
+from backend.services.data_loader import load_campaigns
 
 router = APIRouter(prefix="/api", tags=["checkout"])
 
@@ -55,6 +57,25 @@ def api_get_proposal(proposal_id: str):
 @router.post("/proposals/{proposal_id}/growth/decide")
 def api_decide_addon(proposal_id: str, body: AddonDecisionRequest):
     return checkout.decide_addon(proposal_id, body)
+
+
+@router.get("/merchant/campaigns/pending")
+def api_pending_campaigns(limit: int = Query(default=20, ge=1, le=100)):
+    proposals = checkout.list_pending_merchant_approvals(limit=limit)
+    return {
+        "count": len(proposals),
+        "proposals": [p.model_dump(mode="json") for p in proposals],
+    }
+
+
+@router.get("/merchant/campaigns/catalog")
+def api_campaign_catalog():
+    return load_campaigns()
+
+
+@router.post("/proposals/{proposal_id}/campaign/decide")
+def api_decide_campaign(proposal_id: str, body: MerchantApprovalRequest):
+    return checkout.decide_merchant_campaign(proposal_id, body)
 
 
 @router.post("/proposals/{proposal_id}/confirm")

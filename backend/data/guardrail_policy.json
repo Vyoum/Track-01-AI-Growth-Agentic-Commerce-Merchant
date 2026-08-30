@@ -11,6 +11,7 @@
   "gates": {
     "require_addon_decision_before_payment": true,
     "require_explicit_payment_confirmation": true,
+    "require_merchant_campaign_approval": true,
     "bind_confirmation_to_proposal_id_and_total": true,
     "never_auto_add_recommendations": true,
     "never_trust_client_or_llm_prices": true

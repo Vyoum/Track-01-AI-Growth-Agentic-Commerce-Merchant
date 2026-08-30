@@ -278,8 +278,20 @@ def apply_cart_guardrails(
 
 
 def assert_addon_gate(proposal: Proposal) -> None:
-    """Add-on must be resolved before payment confirmation."""
+    """Add-on / merchant campaign must be resolved before payment confirmation."""
     from fastapi import HTTPException
+
+    if proposal.status == ProposalStatus.AWAITING_MERCHANT_APPROVAL:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "merchant_gate",
+                "message": (
+                    "Merchant must approve or reject the growth campaign "
+                    "before payment confirmation"
+                ),
+            },
+        )
 
     if proposal.status == ProposalStatus.AWAITING_ADDON_DECISION:
         raise HTTPException(
