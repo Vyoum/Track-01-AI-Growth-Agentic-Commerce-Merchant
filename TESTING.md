@@ -242,21 +242,27 @@ sqlite3 backend/data/checkout_agent.db \
   "SELECT id, ts, event_type, user_id, session_id FROM audit_events ORDER BY id DESC LIMIT 30;"
 ```
 
-**Event types you should see on the hero path**
+**Event types on a mock-catalog hero pay (proposal-scoped audit)**
 
-`agent_user_message` → `proposal_source_selected` → `guardrail_evaluated` → `proposal_created` → `campaign_proposed` / `growth_offer_shown` → `decision_trace` → `agent_reply` → `campaign_merchant_approved` → `gate_trace` (merchant) → `addon_accepted` or `addon_skipped` → `gate_trace` (addon) → `payment_confirmation_received` → `payment_order_created` → `payment_verified_paid` (and `a2a_purchase_completed` if `buyer_type=external_agent`).
+`GET /api/proposals/{id}/audit` returns, in order:
+
+`proposal_created` → `campaign_proposed` → `growth_offer_shown` → `decision_trace` → `campaign_merchant_approved` → `gate_trace` (gate=`merchant_approval`) → `addon_accepted` (or `addon_skipped`) → `gate_trace` (`addon_decision`) → `gate_trace` (`payment_confirmation`) → `payment_confirmation_received` → `payment_order_created` → `payment_verified_paid`.
+
+A2A only: `a2a_purchase_completed` after verify when `buyer_type=external_agent`.
+
+`proposal_source_selected` and `guardrail_evaluated` are logged **before** a proposal id exists — they show up on `GET /api/audit?session_id=…`, not on the proposal audit.
+
+Chat: `agent_user_message`, `agent_reply`, `agent_gate_handled`.
 
 Failures: `proposal_rejected`, `addon_rejected_by_guardrail`, `razorpay_order_create_failed`, `payment_signature_invalid`, `payment_failed`, `proposal_expired`, `proposal_cancelled`.
-
-Agent-only: `agent_gate_handled` (`handled_by`: `merchant_gate` / `addon_gate` / `payment_gate`).
 
 **Chat response `handled_by`**
 
 | Value | Meaning |
 |-------|---------|
-| `groq` | LLM tool loop |
-| `fallback` / `fallback_after_groq_error` | No key or Groq error; “usual” still works |
+| `fallback` / `fallback_after_groq_error` | No key or Groq error on a “usual” request; still builds a proposal |
 | `merchant_gate` / `addon_gate` / `payment_gate` | Deterministic phrase gates (LLM cannot bypass) |
+| `groq` | Default label on the JSON response. **This is not proof Groq ran.** With no `GROQ_API_KEY`, a generic message (e.g. `hello`) still returns `handled_by: groq` plus a fallback reply telling you to add a key. Trust `/api/meta` → `features.agent` (true only when a Groq/LLM key is set) and the header pill **Agent online (Groq)**. |
 
 **Not in this repo:** LangSmith, Langfuse, Jaeger, `/metrics`, a merchant admin dashboard, or a dedicated logs UI. FastAPI request logs are the uvicorn console.
 
