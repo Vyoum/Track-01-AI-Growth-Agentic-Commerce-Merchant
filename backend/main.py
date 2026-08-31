@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from backend.api.routes_agent import router as agent_router
 from backend.api.routes_checkout import router as checkout_router
 from backend.api.routes_merchant_mock import router as merchant_mock_router
+from backend.api.routes_well_known import router as well_known_router
 from backend.config import get_settings
 from backend.db import init_db
 from backend.integrations.razorpay_client import keys_are_usable
@@ -46,6 +47,7 @@ app.add_middleware(
 app.include_router(checkout_router)
 app.include_router(agent_router)
 app.include_router(merchant_mock_router)
+app.include_router(well_known_router)
 
 
 @app.get("/")

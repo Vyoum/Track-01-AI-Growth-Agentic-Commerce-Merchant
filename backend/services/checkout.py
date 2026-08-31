@@ -500,6 +500,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
         baseline_total_inr=guarded.cart.total_inr,
         proposal_source=proposal_source,
         source_reason=source_reason,
+        buyer_type=(req.buyer_type or "").strip() or None,
     )
     store.save_proposal(proposal)
     log_event(
@@ -513,6 +514,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
             "reasons": proposal.reasons,
             "proposal_source": proposal.proposal_source,
             "source_reason": proposal.source_reason,
+            "buyer_type": proposal.buyer_type,
             "expires_at": proposal.expires_at.isoformat(),
         },
     )
@@ -992,8 +994,25 @@ def verify_payment(body: VerifyPaymentRequest) -> dict:
             "amount_inr": payment.amount_inr,
             "mock": payment.mock,
             "realized_paid_uplift": payment.payload.get("realized_paid_uplift"),
+            "buyer_type": proposal.buyer_type,
         },
     )
+    if proposal.buyer_type == "external_agent":
+        uplift = payment.payload.get("realized_paid_uplift") or 0
+        log_event(
+            "a2a_purchase_completed",
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            proposal_id=proposal.id,
+            payload={
+                "buyer_type": "external_agent",
+                "total_inr": payment.amount_inr,
+                "uplift_inr": uplift,
+                "baseline_total_inr": proposal.baseline_total_inr,
+                "payment_id": payment.id,
+                "mock": payment.mock,
+            },
+        )
     return {
         "proposal": proposal,
         "payment": payment,

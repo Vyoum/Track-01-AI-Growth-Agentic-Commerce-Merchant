@@ -59,6 +59,12 @@ def api_decide_addon(proposal_id: str, body: AddonDecisionRequest):
     return checkout.decide_addon(proposal_id, body)
 
 
+@router.post("/proposals/{proposal_id}/addon")
+def api_decide_addon_alias(proposal_id: str, body: AddonDecisionRequest):
+    """Alias for A2A manifest compatibility — same handler as growth/decide."""
+    return checkout.decide_addon(proposal_id, body)
+
+
 @router.get("/merchant/campaigns/pending")
 def api_pending_campaigns(limit: int = Query(default=20, ge=1, le=100)):
     proposals = checkout.list_pending_merchant_approvals(limit=limit)
@@ -124,4 +130,19 @@ def api_audit(
 ):
     return {
         "events": list_events(session_id=session_id, user_id=user_id, limit=limit),
+    }
+
+
+@router.get("/a2a/summary")
+def api_a2a_summary(limit: int = Query(default=100, ge=1, le=500)):
+    """Count autonomous buyer-agent purchases from audit trail."""
+    events = list_events(limit=limit)
+    completed = [
+        e for e in events if e.get("event_type") == "a2a_purchase_completed"
+    ]
+    total_uplift = sum(int(e.get("payload", {}).get("uplift_inr") or 0) for e in completed)
+    return {
+        "external_agent_purchases": len(completed),
+        "total_uplift_inr": total_uplift,
+        "recent": completed[-5:],
     }

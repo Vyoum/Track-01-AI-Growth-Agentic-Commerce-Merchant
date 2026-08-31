@@ -189,6 +189,7 @@ class Proposal(BaseModel):
     rejected_addon_ids: list[str] = Field(default_factory=list)
     proposal_source: str = "requested_products"
     source_reason: str = "based on products you requested"
+    buyer_type: str | None = None
 
     @property
     def line_summary(self) -> str:
@@ -216,6 +217,7 @@ class CreateProposalRequest(BaseModel):
     with_growth: bool = True
     allow_substitute: bool = True
     allow_trim: bool = False
+    buyer_type: str | None = None
 
 
 class PaymentRecord(BaseModel):

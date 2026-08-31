@@ -121,6 +121,12 @@ export function buildDecisionCenterView({
   const paid = payment?.status === "paid";
   const orderCreated = payment?.status === "pending";
 
+  const a2aEvent = (audit?.events || []).find(
+    (e) => e.event_type === "a2a_purchase_completed"
+  );
+  const isExternalAgent =
+    proposal?.buyer_type === "external_agent" || Boolean(a2aEvent);
+
   let userApproval = "Pending";
   if (addonAccepted) userApproval = "Explicitly accepted";
   else if (addonSkipped) userApproval = "Explicitly skipped add-on";
@@ -189,6 +195,15 @@ export function buildDecisionCenterView({
               ? "pending"
               : payment.status,
           orderId: payment.razorpay_order_id,
+        }
+      : null,
+    a2a: isExternalAgent
+      ? {
+          buyerType: "external_agent",
+          totalInr: a2aEvent?.payload?.total_inr ?? payment?.amount_inr,
+          upliftInr: a2aEvent?.payload?.uplift_inr ?? addonInr,
+          message:
+            "Purchase completed by an autonomous AI buyer agent — same gates and guardrails as a human checkout.",
         }
       : null,
     summary: trace?.summary,

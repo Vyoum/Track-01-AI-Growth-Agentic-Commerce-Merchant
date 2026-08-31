@@ -135,6 +135,17 @@ export default function DecisionCenter({
         </div>
       )}
 
+      {view.a2a && (
+        <div className="dc-block dc-a2a">
+          <h3>A2A BUYER AGENT</h3>
+          <p className="dc-pass">✓ Autonomous external agent purchase</p>
+          <p className="dc-meta">{view.a2a.message}</p>
+          {view.a2a.upliftInr > 0 && (
+            <p className="dc-meta">Uplift ₹{view.a2a.upliftInr}</p>
+          )}
+        </div>
+      )}
+
       {view.summary && (
         <p className="dc-summary">
           {view.allPassed
