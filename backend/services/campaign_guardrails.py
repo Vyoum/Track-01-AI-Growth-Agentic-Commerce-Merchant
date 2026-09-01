@@ -57,13 +57,17 @@ def apply_campaign_guardrails(
     notes.append(f"Category {product.category} allowed")
 
     allowed = set(campaign.get("allowed_categories") or [])
+    # Soft check: allowlist is advisory for live multi-category catalogs.
+    # Complements / relationship / popular-budget offers should still surface.
     if allowed and product.category not in allowed:
-        return CampaignGuardrailResult(
-            False,
-            [f"Category {product.category} not in campaign allowed_categories"],
+        notes.append(
+            f"Category {product.category} outside campaign allow-list "
+            f"{sorted(allowed)} — allowing growth offer to proceed"
         )
-    if allowed:
+    elif allowed:
         notes.append("Category within campaign allow-list")
+    else:
+        notes.append("No campaign category allow-list — all non-denied categories OK")
 
     if product.stock < 1:
         return CampaignGuardrailResult(False, ["Offer product out of stock"])

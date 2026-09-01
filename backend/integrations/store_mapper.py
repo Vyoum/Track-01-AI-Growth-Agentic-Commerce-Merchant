@@ -60,7 +60,13 @@ def map_product(raw: dict[str, Any], *, default_stock: int = 0) -> Product:
         id=pid,
         name=str(raw.get("name") or raw.get("title") or pid),
         price_inr=price_inr,
-        category=str(raw.get("category") or raw.get("product_type") or "uncategorized"),
+        category=str(
+            raw.get("category")
+            or raw.get("category_label")
+            or raw.get("product_type")
+            or raw.get("collection")
+            or "uncategorized"
+        ),
         stock=stock,
         tags=raw_tags,
         complements=complements,

@@ -28,6 +28,9 @@ body {
   max-width: 1100px;
   margin: 0 auto;
   padding: 28px 20px 40px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
@@ -75,12 +78,17 @@ h1 {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
+  align-items: start;
 }
 
 .side-stack {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
 }
 
 .side-stack .panel {
@@ -262,27 +270,42 @@ h1 {
   flex-direction: column;
 }
 
+.panel.chat {
+  height: calc(100vh - 160px);
+  max-height: calc(100vh - 160px);
+  min-height: 420px;
+  position: sticky;
+  top: 16px;
+  overflow: hidden;
+}
+
 .panel h2,
 .panel h3 {
   margin: 0 0 12px;
   font-size: 1rem;
+  flex-shrink: 0;
 }
 
 .messages {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
+  padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bubble {
   max-width: 90%;
   padding: 10px 12px;
   border-radius: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
   font-size: 0.95rem;
+  white-space: pre-wrap;
 }
 
 .bubble.user {
@@ -299,6 +322,7 @@ h1 {
 .composer {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .composer input {
@@ -384,7 +408,267 @@ hr {
     grid-template-columns: 1fr;
   }
 
+  .panel.chat {
+    position: static;
+    height: min(70vh, 560px);
+    max-height: min(70vh, 560px);
+  }
+
+  .side-stack {
+    max-height: none;
+    overflow: visible;
+  }
+
   .app-header {
     flex-direction: column;
   }
+
+  .merchant-header-actions {
+    width: 100%;
+  }
 }
+
+/* —— Merchant /campaign page —— */
+.merchant-app {
+  max-width: 1200px;
+}
+
+.merchant-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.nav-link {
+  color: #9be0b8;
+  text-decoration: none;
+  font-size: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #121916;
+}
+
+.nav-link:hover {
+  border-color: #3d9b6a;
+}
+
+.merchant-header-actions button.ghost {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.merchant-toast {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #1a2818;
+  border: 1px solid #2f4a3a;
+}
+
+.merchant-toast.error {
+  background: #2a1515;
+  border-color: #5a2a2a;
+  color: #fca5a5;
+}
+
+.merchant-section {
+  margin-bottom: 28px;
+}
+
+.merchant-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.merchant-section-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.merchant-count {
+  font-size: 0.8rem;
+  color: #8ea396;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.merchant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.merchant-card {
+  background: color-mix(in srgb, var(--panel) 92%, black);
+  border: 1px solid #4a6b3a;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.merchant-card.catalog {
+  border-color: var(--line);
+}
+
+.merchant-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.merchant-card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.merchant-badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+}
+
+.merchant-badge.pending {
+  color: #fbbf24;
+  border-color: #92640a;
+  background: #2a2210;
+}
+
+.merchant-badge.enabled {
+  color: #6ee7a8;
+  border-color: #3d9b6a;
+  background: #122018;
+}
+
+.merchant-badge.disabled {
+  color: #9ab0a6;
+}
+
+.merchant-policy {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #121916;
+}
+
+.merchant-notes {
+  margin-top: 10px;
+}
+
+.merchant-app code {
+  font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 0.85em;
+  color: #9be0b8;
+}
+
+/* —— A2A /a2a page —— */
+.a2a-app {
+  max-width: 1200px;
+}
+
+.a2a-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.a2a-panel {
+  min-height: unset;
+}
+
+.a2a-manifest-summary {
+  margin-bottom: 12px;
+}
+
+.a2a-json {
+  margin: 0;
+  padding: 12px;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #0a0f0c;
+  border: 1px solid var(--line);
+  font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #b8cfc4;
+}
+
+.a2a-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.a2a-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: #8ea396;
+}
+
+.a2a-form input[type="text"],
+.a2a-form input[type="number"] {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #101612;
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.a2a-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  color: #cfe6d8 !important;
+}
+
+.a2a-trace {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed #2f4a3a;
+  background: #0f1412;
+}
+
+.a2a-trace ol {
+  margin: 8px 0 0;
+  padding-left: 1.2rem;
+  color: #cfe6d8;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.a2a-result {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.a2a-decision-wrap {
+  margin-top: 8px;
+}
+
+.dc-a2a {
+  border-color: #4a3a6b;
+  background: color-mix(in srgb, #1a1828 85%, black);
+}
+

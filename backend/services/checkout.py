@@ -104,16 +104,26 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
             },
         )
     elif result.offer:
-        # Offer without campaign match after guardrails — skip surfacing
-        proposal.growth_offer = None
+        # Growth found a complement / popular add-on but no campaign wrapper —
+        # still surface it for the customer (same gate as earlier add-on flow).
+        proposal.growth_offer = result.offer
         proposal.campaign_decision = None
-        proposal.status = ProposalStatus.AWAITING_CONFIRMATION
+        proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
+        if proposal.growth_metrics:
+            proposal.growth_metrics.recommendation_shown = True
         log_event(
-            "campaign_skipped",
+            "growth_offer_shown",
             user_id=proposal.user_id,
             session_id=proposal.session_id,
             proposal_id=proposal.id,
-            payload={"skipped_reasons": orchestration.skipped_reasons},
+            payload={
+                "offer": result.offer.model_dump(),
+                "baseline_total_inr": proposal.total_inr,
+                "candidates_considered": result.metrics.candidates_considered,
+                "pending_merchant_approval": False,
+                "campaign_skipped_reasons": orchestration.skipped_reasons,
+                "mode": "direct_addon_without_campaign",
+            },
         )
     else:
         proposal.growth_offer = None

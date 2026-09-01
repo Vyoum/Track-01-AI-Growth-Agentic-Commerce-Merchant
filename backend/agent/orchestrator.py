@@ -32,6 +32,73 @@ def _extract_budget(message: str, default: int = 800) -> int:
     return default
 
 
+def _strip_markdown(text: str) -> str:
+    """Remove markdown emphasis so chat bubbles stay plain text."""
+    cleaned = text or ""
+    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.+?)__", r"\1", cleaned)
+    cleaned = re.sub(r"(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)", r"\1", cleaned)
+    cleaned = re.sub(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", r"\1", cleaned)
+    cleaned = cleaned.replace("**", "").replace("__", "")
+    # Leading markdown list markers / orphan asterisks at line start
+    cleaned = re.sub(r"(?m)^\s*[\*\-•]\s+", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\*\s*", "", cleaned)
+    return cleaned.strip()
+
+
+def _format_items_numbered(items: list[dict[str, Any]] | list[Any]) -> str:
+    lines: list[str] = []
+    for i, item in enumerate(items, start=1):
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("product_id") or "Item"
+            price = item.get("line_total_inr", item.get("unit_price_inr", 0))
+        else:
+            name = getattr(item, "name", "Item")
+            price = getattr(item, "line_total_inr", getattr(item, "unit_price_inr", 0))
+        lines.append(f"{i}. {name} – ₹{price}")
+    return "\n".join(lines)
+
+
+def _confirmation_reply(
+    *,
+    items: list[Any],
+    total_inr: int,
+    budget_inr: int | None,
+    source_reason: str | None = None,
+) -> str:
+    parts: list[str] = []
+    if source_reason:
+        parts.append(source_reason.rstrip(".") + ".")
+    parts.append("Here are your items:")
+    parts.append(_format_items_numbered(items))
+    if budget_inr is not None:
+        parts.append(f"Total: ₹{total_inr} (within your ₹{budget_inr} budget).")
+    else:
+        parts.append(f"Total: ₹{total_inr}.")
+    parts.append('When you\'re ready, just say "confirm payment."')
+    return "\n".join(parts)
+
+
+def _normalize_assistant_reply(
+    reply: str,
+    *,
+    proposal: dict[str, Any] | None = None,
+) -> str:
+    cleaned = _strip_markdown(reply)
+    if not proposal:
+        return cleaned
+    status = proposal.get("status")
+    items = proposal.get("items") or []
+    if status == "awaiting_confirmation" and items:
+        return _confirmation_reply(
+            items=items,
+            total_inr=int(proposal.get("total_inr") or 0),
+            budget_inr=proposal.get("stated_budget_inr"),
+            source_reason=proposal.get("source_reason"),
+        )
+    return cleaned
+
+
 def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict[str, Any]:
     """Minimal deterministic path when Groq key is missing."""
     norm = message.lower()
@@ -59,12 +126,17 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
                 f"{result['growth_offer']['offer_text']}"
             )
         else:
-            reply = (
-                f"{result['source_reason'].capitalize()}: "
-                f"{result['line_summary']} for ₹{result['total_inr']}. "
-                "Say 'confirm payment' when you're ready."
+            reply = _confirmation_reply(
+                items=result.get("items") or [],
+                total_inr=int(result.get("total_inr") or 0),
+                budget_inr=result.get("stated_budget_inr") or budget,
+                source_reason=result.get("source_reason"),
             )
-        return {"reply": reply, "proposal_id": result["proposal_id"], "tool_used": "fallback"}
+        return {
+            "reply": _strip_markdown(reply),
+            "proposal_id": result["proposal_id"],
+            "tool_used": "fallback",
+        }
 
     return {
         "reply": (
@@ -163,7 +235,7 @@ def _run_groq_loop(
                 )
             continue
 
-        reply = (choice.content or "").strip()
+        reply = _strip_markdown((choice.content or "").strip())
         if not reply:
             reply = "How can I help with your order?"
         return {
@@ -206,7 +278,8 @@ def run_agent_turn(
         message=message,
     )
     if gate:
-        append_message(session, "assistant", gate["reply"])
+        gate_reply = _strip_markdown(gate["reply"])
+        append_message(session, "assistant", gate_reply)
         if gate.get("proposal"):
             session["proposal_id"] = gate["proposal"].get("id")
         if gate.get("payment"):
@@ -221,7 +294,7 @@ def run_agent_turn(
         )
         return {
             "session_id": sid,
-            "reply": gate["reply"],
+            "reply": gate_reply,
             "handled_by": gate.get("handled_by"),
             "proposal": gate.get("proposal"),
             "checkout": gate.get("checkout"),
@@ -236,9 +309,6 @@ def run_agent_turn(
     ):
         agent_result = _fallback_reply(uid, message, session)
         agent_result["tool_used"] = "fallback_after_groq_error"
-    reply = agent_result["reply"]
-    append_message(session, "assistant", reply)
-    save(session)
 
     proposal_data = None
     pid = agent_result.get("proposal_id") or session.get("proposal_id")
@@ -249,9 +319,15 @@ def run_agent_turn(
             p = checkout_svc.get_proposal(pid)
             proposal_data = p.model_dump(mode="json")
             session["proposal_id"] = pid
-            save(session)
         except Exception:  # noqa: BLE001
-            pass
+            proposal_data = None
+
+    reply = _normalize_assistant_reply(
+        agent_result["reply"],
+        proposal=proposal_data,
+    )
+    append_message(session, "assistant", reply)
+    save(session)
 
     log_event(
         "agent_reply",

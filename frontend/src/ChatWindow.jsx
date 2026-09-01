@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   failPayment,
   openRazorpayCheckout,
@@ -23,6 +23,13 @@ export default function ChatWindow({
   const [messages, setMessages] = useState(STARTER);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const messagesRef = useRef(null);
+
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, busy]);
 
   async function send() {
     const text = input.trim();
@@ -102,7 +109,7 @@ export default function ChatWindow({
   return (
     <section className="panel chat">
       <h2>Chat</h2>
-      <div className="messages">
+      <div className="messages" ref={messagesRef}>
         {messages.map((m, i) => (
           <div key={i} className={`bubble ${m.role}`}>
             {m.text}

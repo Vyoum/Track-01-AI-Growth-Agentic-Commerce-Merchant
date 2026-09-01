@@ -70,6 +70,36 @@ export function fetchPendingCampaigns() {
   return getJson("/api/merchant/campaigns/pending");
 }
 
+export function fetchCampaignCatalog() {
+  return getJson("/api/merchant/campaigns/catalog");
+}
+
+export function fetchAgentManifest() {
+  return getJson("/.well-known/agent-catalog.json");
+}
+
+export function fetchA2aSummary() {
+  return getJson("/api/a2a/summary");
+}
+
+export function searchProducts(q = "") {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  return getJson(`/api/products${qs}`);
+}
+
+export function confirmProposalForUser(
+  proposalId,
+  expectedTotalInr,
+  userId,
+  idempotencyKey
+) {
+  return postJson(`/api/proposals/${proposalId}/confirm`, {
+    expected_total_inr: expectedTotalInr,
+    user_id: userId,
+    idempotency_key: idempotencyKey,
+  });
+}
+
 export function confirmProposal(proposalId, expectedTotalInr) {
   return postJson(`/api/proposals/${proposalId}/confirm`, {
     expected_total_inr: expectedTotalInr,

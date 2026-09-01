@@ -20,7 +20,7 @@
       "strategy": "popular_budget_fit",
       "priority": 10,
       "max_discount_pct": 0,
-      "allowed_categories": ["supplements", "accessories", "grocery", "fitness"],
+      "allowed_categories": [],
       "copy_key": "popular_budget_addon",
       "copy_variants": ["popular_budget_addon", "popular_budget_addon_alt"]
     },
@@ -33,7 +33,7 @@
       "strategy": "popular_budget_fit",
       "priority": 15,
       "max_discount_pct": 0,
-      "allowed_categories": ["supplements", "accessories", "grocery", "fitness"],
+      "allowed_categories": [],
       "copy_key": "new_user_bestseller_addon",
       "copy_variants": ["new_user_bestseller_addon"]
     },
@@ -46,7 +46,7 @@
       "strategy": "catalog_complements",
       "priority": 5,
       "max_discount_pct": 0,
-      "allowed_categories": ["supplements", "accessories", "grocery", "fitness"],
+      "allowed_categories": [],
       "copy_key": "complement_addon",
       "copy_variants": ["complement_addon", "complement_addon_alt"]
     },
@@ -59,7 +59,7 @@
       "strategy": "catalog_complements",
       "priority": 20,
       "max_discount_pct": 0,
-      "allowed_categories": ["supplements", "accessories", "grocery", "fitness"],
+      "allowed_categories": [],
       "copy_key": "cross_sell_addon",
       "copy_variants": ["cross_sell_addon"]
     }
