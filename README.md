@@ -123,6 +123,8 @@ npm run dev
 - API health: http://127.0.0.1:8000/health  
 - Chat UI: http://127.0.0.1:5173  
 
+**Testing + demo (ports, walkthrough, traces, smoke scripts, manual plan):** [`TESTING.md`](TESTING.md)
+
 ## Folder map
 
 ```
@@ -139,6 +141,7 @@ frontend/
   src/                 # ChatWindow, OrderSummaryCard, api
 docs/
   demo_scope.md        # frozen scenarios & acceptance criteria
+TESTING.md             # run, demo, traces, smoke tests, manual plan
 ```
 
 ## Safety
