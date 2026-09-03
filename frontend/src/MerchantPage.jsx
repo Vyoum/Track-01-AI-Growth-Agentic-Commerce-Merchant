@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import NavBar from "./NavBar.jsx";
 import {
   decideCampaign,
   fetchCampaignCatalog,
@@ -204,9 +205,6 @@ export default function MerchantPage() {
           </p>
         </div>
         <div className="merchant-header-actions">
-          <a className="nav-link" href="/">
-            ← Checkout
-          </a>
           <button type="button" className="ghost" onClick={refresh} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
           </button>
@@ -219,6 +217,8 @@ export default function MerchantPage() {
           </div>
         </div>
       </header>
+
+      <NavBar current="/merchant" />
 
       {message && <p className="msg merchant-toast">{message}</p>}
       {error && <p className="msg merchant-toast error">{error}</p>}

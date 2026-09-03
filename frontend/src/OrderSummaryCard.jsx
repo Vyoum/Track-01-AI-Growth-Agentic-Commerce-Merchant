@@ -30,8 +30,7 @@ export default function OrderSummaryCard({
       setProposal(p);
       if (p.status === "awaiting_merchant_approval") {
         setMessage(
-          `Campaign pending merchant approval: ${p.campaign_decision?.campaign_id || "—"}. ` +
-            "Use Merchant Desk to Approve."
+          "Optional add-on is waiting for store approval. Open Merchant to release it."
         );
       } else {
         setMessage(p.growth_offer?.offer_text || "Proposal ready");
@@ -169,7 +168,7 @@ export default function OrderSummaryCard({
           <dd>₹{proposal.total_inr}</dd>
           <dt>Baseline</dt>
           <dd>₹{proposal.baseline_total_inr ?? "—"}</dd>
-          {proposal.growth_offer && (
+          {proposal.growth_offer && status === "awaiting_addon_decision" && (
             <>
               <dt>Offer</dt>
               <dd>
@@ -181,13 +180,28 @@ export default function OrderSummaryCard({
         </dl>
       )}
 
+      {status === "awaiting_merchant_approval" && (
+        <div className="merchant-pending">
+          <p className="msg">
+            Offer pending store approval — the add-on is not shown to you yet.
+          </p>
+          <p className="muted">
+            Demo judges: open{" "}
+            <a className="inline-link" href="/merchant">
+              Merchant
+            </a>{" "}
+            to release or hold the offer, then return here.
+          </p>
+        </div>
+      )}
+
       {status === "awaiting_addon_decision" && (
         <div className="actions">
           <button type="button" disabled={busy} onClick={() => onAddon("accept")}>
-            Add it
+            Add to order
           </button>
           <button type="button" disabled={busy} className="ghost" onClick={() => onAddon("skip")}>
-            Skip
+            No thanks
           </button>
         </div>
       )}

@@ -150,6 +150,53 @@ def get_payment_by_idempotency(idempotency_key: str) -> PaymentRecord | None:
     return None
 
 
+def claim_proposal_for_payment(proposal_id: str) -> tuple[bool, Proposal | None]:
+    """Atomically move one awaiting proposal to payment_pending.
+
+    BEGIN IMMEDIATE serializes competing writers. The status predicate is the
+    compare-and-swap: only one caller can claim a proposal for Razorpay work.
+    """
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT payload_json FROM proposals WHERE id = ?",
+            (proposal_id,),
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            return False, None
+
+        proposal = Proposal.model_validate(json.loads(row["payload_json"]))
+        if proposal.status != ProposalStatus.AWAITING_CONFIRMATION:
+            conn.rollback()
+            return False, proposal
+
+        proposal.status = ProposalStatus.PAYMENT_PENDING
+        if proposal.confirmed_at is None:
+            proposal.confirmed_at = _now()
+        payload = proposal.model_dump(mode="json")
+        cursor = conn.execute(
+            """
+            UPDATE proposals
+            SET status = ?, payload_json = ?, total_inr = ?
+            WHERE id = ? AND status = ?
+            """,
+            (
+                ProposalStatus.PAYMENT_PENDING.value,
+                json.dumps(payload),
+                proposal.total_inr,
+                proposal.id,
+                ProposalStatus.AWAITING_CONFIRMATION.value,
+            ),
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            latest = get_proposal(proposal_id)
+            return False, latest
+        conn.commit()
+        return True, proposal
+
+
 def mark_proposal_status(proposal: Proposal, status: ProposalStatus) -> Proposal:
     proposal.status = status
     if status == ProposalStatus.CONFIRMED and proposal.confirmed_at is None:

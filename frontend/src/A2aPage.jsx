@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import DecisionCenter from "./DecisionCenter.jsx";
+import NavBar from "./NavBar.jsx";
 import {
   fetchA2aSummary,
   fetchAgentManifest,
@@ -97,12 +98,6 @@ export default function A2aPage() {
           </p>
         </div>
         <div className="merchant-header-actions">
-          <a className="nav-link" href="/">
-            ← Checkout
-          </a>
-          <a className="nav-link" href="/merchant">
-            Merchant Desk
-          </a>
           <button type="button" className="ghost" onClick={refreshMeta}>
             Refresh
           </button>
@@ -111,6 +106,8 @@ export default function A2aPage() {
           </div>
         </div>
       </header>
+
+      <NavBar current="/a2a" />
 
       {error && !busy && (
         <p className="msg merchant-toast error">{error}</p>

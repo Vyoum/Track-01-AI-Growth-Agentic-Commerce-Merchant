@@ -146,9 +146,14 @@ export function buildDecisionCenterView({
     } else if (camp.merchant_approval_status === "rejected") {
       merchantApproval = "Explicitly rejected";
     } else {
-      merchantApproval = "Pending merchant click";
+      merchantApproval = "Pending — open /merchant to release or hold";
     }
   }
+
+  // Until the merchant releases the offer, do not surface SKU / copy to the
+  // customer-facing checkout. Merchant desk and judge Mode still see the full
+  // package after approval (or on /merchant / /demo).
+  const offerHeld = proposal?.status === "awaiting_merchant_approval";
 
   return {
     userRequest:
@@ -162,26 +167,30 @@ export function buildDecisionCenterView({
         (i) => !addonAccepted || i.reason?.includes("growth add-on") === false
       ) || proposal?.items,
     },
-    campaign: camp
-      ? {
-          opportunity: camp.opportunity,
-          campaignId: camp.campaign_id,
-          campaignName: camp.campaign_name,
-          segment: camp.target_segment,
-          copyKey: camp.copy_key,
-          rationale: camp.rationale || [],
-        }
-      : null,
-    growth: addonInr > 0 || growthOffer
-      ? {
-          amount: addonAccepted ? addonInr : growthOffer?.price_inr || addonInr,
-          source: formatSource(growthSource || camp?.offer?.source),
-          name: growthOffer?.name || camp?.offer?.name,
-        }
-      : null,
-    why: whyBullets.length
-      ? whyBullets
-      : camp?.rationale?.slice(0, 4) || [],
+    campaign:
+      camp && !offerHeld
+        ? {
+            opportunity: camp.opportunity,
+            campaignId: camp.campaign_id,
+            campaignName: camp.campaign_name,
+            segment: camp.target_segment,
+            copyKey: camp.copy_key,
+            rationale: camp.rationale || [],
+          }
+        : null,
+    growth:
+      !offerHeld && (addonInr > 0 || growthOffer)
+        ? {
+            amount: addonAccepted ? addonInr : growthOffer?.price_inr || addonInr,
+            source: formatSource(growthSource || camp?.offer?.source),
+            name: growthOffer?.name || camp?.offer?.name,
+          }
+        : null,
+    why: offerHeld
+      ? ["Optional add-on held until store releases it"]
+      : whyBullets.length
+        ? whyBullets
+        : camp?.rationale?.slice(0, 4) || [],
     guardrails: guardrailRows,
     merchantApproval,
     userApproval,

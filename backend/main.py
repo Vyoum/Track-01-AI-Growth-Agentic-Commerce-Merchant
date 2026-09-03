@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 
 from backend.api.routes_agent import router as agent_router
 from backend.api.routes_checkout import router as checkout_router
+from backend.api.routes_demo import router as demo_router
 from backend.api.routes_merchant_mock import router as merchant_mock_router
 from backend.api.routes_well_known import router as well_known_router
 from backend.config import get_settings
@@ -45,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(checkout_router)
+app.include_router(demo_router)
 app.include_router(agent_router)
 app.include_router(merchant_mock_router)
 app.include_router(well_known_router)
@@ -104,6 +106,8 @@ def meta() -> dict:
             "razorpay": True,
             "razorpay_test_ready": razorpay_ready,
             "merchant_adapter": True,
+            "growth_metrics": True,
+            "demo_replay": True,
         },
         "message": (
             f"Catalog source: {source}. "

@@ -197,7 +197,7 @@ class Proposal(BaseModel):
 
 
 class ConfirmationRequest(BaseModel):
-    expected_total_inr: int
+    expected_total_inr: int = Field(ge=1, le=5000)
     idempotency_key: str | None = None
     user_id: str | None = None
 
@@ -211,7 +211,7 @@ class CreateProposalRequest(BaseModel):
     user_id: str
     product_ids: list[str] = Field(default_factory=list)
     quantities: dict[str, int] = Field(default_factory=dict)
-    stated_budget_inr: int | None = None
+    stated_budget_inr: int | None = Field(default=None, ge=1, le=5000)
     session_id: str | None = None
     use_usual: bool = False
     with_growth: bool = True

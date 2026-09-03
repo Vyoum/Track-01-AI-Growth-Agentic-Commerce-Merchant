@@ -12,8 +12,23 @@ from razorpay.errors import SignatureVerificationError
 from backend.config import Settings, get_settings
 
 
+MOCK_ORDER_PREFIX = "order_mock_"
+MOCK_SIGNATURE_PREFIX = "mock_ok_"
+
+
 class RazorpayConfigError(RuntimeError):
     pass
+
+
+def is_mock_signature_valid(
+    *,
+    razorpay_order_id: str,
+    razorpay_signature: str,
+) -> bool:
+    """Verification rule for mock orders — never applied to real Razorpay orders."""
+    return razorpay_signature.startswith(
+        MOCK_SIGNATURE_PREFIX
+    ) and razorpay_order_id.startswith(MOCK_ORDER_PREFIX)
 
 
 @dataclass
@@ -80,7 +95,7 @@ class RazorpayClient:
         notes = notes or {}
 
         if force_mock or not self.live_ready:
-            order_id = f"order_mock_{uuid.uuid4().hex[:14]}"
+            order_id = f"{MOCK_ORDER_PREFIX}{uuid.uuid4().hex[:14]}"
             return CreatedOrder(
                 order_id=order_id,
                 amount_paise=amount_paise,
@@ -129,9 +144,9 @@ class RazorpayClient:
         razorpay_signature: str,
     ) -> bool:
         if not self.live_ready:
-            # Mock verify: accept signatures that start with mock_ok_
-            return razorpay_signature.startswith("mock_ok_") and razorpay_order_id.startswith(
-                "order_mock_"
+            return is_mock_signature_valid(
+                razorpay_order_id=razorpay_order_id,
+                razorpay_signature=razorpay_signature,
             )
 
         assert self._client is not None

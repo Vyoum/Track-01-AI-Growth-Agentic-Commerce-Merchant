@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from backend.config import get_settings
 
@@ -46,16 +48,25 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Last-line defense: a proposal can own at most one payment record.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_proposal_id
+ON payments(proposal_id);
 """
 
 
-def connect(db_path: Path | None = None) -> sqlite3.Connection:
+@contextmanager
+def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     settings = get_settings()
     path = db_path or settings.sqlite_path
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=10.0)
     conn.row_factory = sqlite3.Row
-    return conn
+    conn.execute("PRAGMA busy_timeout = 10000")
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db(db_path: Path | None = None) -> Path:

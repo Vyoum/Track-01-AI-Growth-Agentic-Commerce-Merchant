@@ -22,8 +22,18 @@ async function postJson(path, body) {
   return data;
 }
 
+export async function inspectApiRequest(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, options);
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
 export function fetchProposalAudit(proposalId) {
   return getJson(`/api/proposals/${proposalId}/audit`);
+}
+
+export function fetchProposal(proposalId) {
+  return getJson(`/api/proposals/${proposalId}`);
 }
 
 export function fetchHealth() {
@@ -80,6 +90,22 @@ export function fetchAgentManifest() {
 
 export function fetchA2aSummary() {
   return getJson("/api/a2a/summary");
+}
+
+export function fetchGrowthMetrics() {
+  return getJson("/api/metrics/growth");
+}
+
+export function fetchDemoScenarios() {
+  return getJson("/api/demo/scenarios");
+}
+
+export function runDemoReplay(sessions = 25, seed = 7) {
+  return postJson("/api/demo/replay", { sessions, seed });
+}
+
+export function createProposal(body) {
+  return postJson("/api/proposals", body);
 }
 
 export function searchProducts(q = "") {

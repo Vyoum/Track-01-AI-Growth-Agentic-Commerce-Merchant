@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ChatWindow from "./ChatWindow.jsx";
 import DecisionCenter from "./DecisionCenter.jsx";
-import MerchantDesk from "./MerchantDesk.jsx";
+import NavBar from "./NavBar.jsx";
 import OrderSummaryCard from "./OrderSummaryCard.jsx";
 import { fetchMeta, fetchHealth, fetchProposalAudit } from "./api.js";
 
@@ -75,6 +75,12 @@ export default function App() {
         </div>
       </header>
 
+      <NavBar current="/">
+        <a className="nav-cta" href="/demo">
+          New here? Start with Judge Mode →
+        </a>
+      </NavBar>
+
       <main className="layout">
         <ChatWindow
           sessionId={sessionId}
@@ -87,7 +93,6 @@ export default function App() {
           }}
         />
         <div className="side-stack">
-          <MerchantDesk proposal={proposal} setProposal={setProposal} />
           <OrderSummaryCard
             proposal={proposal}
             setProposal={setProposal}

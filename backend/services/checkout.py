@@ -760,6 +760,8 @@ def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
 def confirm_proposal(
     proposal_id: str,
     body: ConfirmationRequest,
+    *,
+    force_mock: bool = False,
 ) -> dict:
     proposal = get_proposal(proposal_id)
 
@@ -788,6 +790,14 @@ def confirm_proposal(
         ProposalStatus.PAID,
     }:
         payment = store.get_payment_by_proposal(proposal_id)
+        if payment is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "payment_in_progress",
+                    "message": "Another confirmation is creating this proposal's payment",
+                },
+            )
         return {
             "proposal": proposal,
             "payment": payment,
@@ -824,8 +834,27 @@ def confirm_proposal(
         },
     )
 
-    proposal = store.mark_proposal_status(proposal, ProposalStatus.CONFIRMED)
-    proposal = store.mark_proposal_status(proposal, ProposalStatus.PAYMENT_PENDING)
+    claimed, claimed_proposal = store.claim_proposal_for_payment(proposal.id)
+    if not claimed:
+        existing_payment = store.get_payment_by_proposal(proposal.id)
+        if existing_payment:
+            latest = claimed_proposal or proposal
+            return {
+                "proposal": latest,
+                "payment": existing_payment,
+                "checkout": _checkout_payload(existing_payment, latest),
+                "idempotent_replay": True,
+                "growth_summary": _growth_summary(latest),
+            }
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "payment_in_progress",
+                "message": "Another confirmation claimed this proposal",
+            },
+        )
+    assert claimed_proposal is not None
+    proposal = claimed_proposal
 
     if proposal.growth_metrics and proposal.growth_metrics.recommendation_accepted:
         proposal.growth_metrics.accepted_order_value = proposal.total_inr
@@ -856,6 +885,7 @@ def confirm_proposal(
                 amount_inr=proposal.total_inr,
                 receipt=receipt,
                 notes=notes,
+                force_mock=force_mock,
             )
             break
         except RazorpayConfigError as exc:
@@ -953,14 +983,24 @@ def verify_payment(body: VerifyPaymentRequest) -> dict:
     if body.razorpay_order_id != payment.razorpay_order_id:
         raise HTTPException(status_code=409, detail="Order id mismatch")
 
-    from backend.integrations.razorpay_client import get_razorpay_client
-
-    client = get_razorpay_client()
-    ok = client.verify_payment_signature(
-        razorpay_order_id=body.razorpay_order_id,
-        razorpay_payment_id=body.razorpay_payment_id,
-        razorpay_signature=body.razorpay_signature,
+    from backend.integrations.razorpay_client import (
+        get_razorpay_client,
+        is_mock_signature_valid,
     )
+
+    if payment.mock:
+        # A mock order can only ever be settled by mock rules, even when real
+        # test keys are configured (replay batches force mock orders).
+        ok = is_mock_signature_valid(
+            razorpay_order_id=body.razorpay_order_id,
+            razorpay_signature=body.razorpay_signature,
+        )
+    else:
+        ok = get_razorpay_client().verify_payment_signature(
+            razorpay_order_id=body.razorpay_order_id,
+            razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_signature=body.razorpay_signature,
+        )
     if not ok:
         payment = store.mark_payment_status(payment, PaymentStatus.FAILED)
         log_event(
