@@ -127,6 +127,63 @@ class DemoEndpointTests(unittest.TestCase):
         self.assertEqual(body["revenue"]["paid_gmv_inr"], 0)
         self.assertEqual(body["safety"]["unauthorized_charges"], 0)
 
+    def test_chat_exposes_groq_tool_provenance_in_response_and_audit(self) -> None:
+        session_id = "judge_provenance_groq"
+        simulated = {
+            "reply": "I found matching products.",
+            "tool_used": "groq",
+            "tool_trace": ["search_products", "create_proposal_from_products"],
+        }
+        with patch(
+            "backend.agent.orchestrator._run_groq_loop",
+            return_value=simulated,
+        ):
+            response = self.client.post(
+                "/api/chat",
+                json={
+                    "message": "Find me something useful under ₹800",
+                    "session_id": session_id,
+                    "user_id": "judge_provenance_user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["handled_by"], "groq")
+        self.assertEqual(body["tool_trace"], simulated["tool_trace"])
+        self.assertTrue(body["model"])
+
+        events = self.client.get(
+            "/api/audit", params={"session_id": session_id}
+        ).json()["events"]
+        reply_event = next(e for e in events if e["event_type"] == "agent_reply")
+        self.assertEqual(reply_event["payload"]["handled_by"], "groq")
+        self.assertEqual(reply_event["payload"]["tool_trace"], simulated["tool_trace"])
+        self.assertFalse(reply_event["payload"]["fallback"])
+
+    def test_chat_labels_deterministic_fallback_without_groq(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"GROQ_API_KEY": "", "LLM_API_KEY": ""},
+        ):
+            get_settings.cache_clear()
+            response = self.client.post(
+                "/api/chat",
+                json={
+                    "message": "Order my usual, under ₹800",
+                    "session_id": "judge_provenance_fallback",
+                    "user_id": "demo_user_01",
+                },
+            )
+
+        get_settings.cache_clear()
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["handled_by"], "fallback")
+        self.assertEqual(body["tool_trace"], ["create_proposal_from_usual"])
+        self.assertIsNone(body["model"])
+        self.assertIsNotNone(body["proposal"])
+
     def test_every_batch_includes_both_attack_scenarios(self) -> None:
         import random
 

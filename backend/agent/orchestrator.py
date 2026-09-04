@@ -111,7 +111,11 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
             session_id=session["session_id"],
         )
         if "error" in result:
-            return {"reply": f"Sorry, I couldn't build that order: {result['error']}"}
+            return {
+                "reply": f"Sorry, I couldn't build that order: {result['error']}",
+                "tool_used": "fallback",
+                "tool_trace": ["create_proposal_from_usual"],
+            }
         session["proposal_id"] = result["proposal_id"]
         if result.get("status") == "awaiting_merchant_approval":
             reply = (
@@ -141,6 +145,7 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
             "reply": _strip_markdown(reply),
             "proposal_id": result["proposal_id"],
             "tool_used": "fallback",
+            "tool_trace": ["create_proposal_from_usual"],
         }
 
     return {
@@ -148,6 +153,8 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
             "I can help order your usual (e.g. 'Order my usual, under ₹800'). "
             "Add GROQ_API_KEY for full conversational support."
         ),
+        "tool_used": "fallback",
+        "tool_trace": [],
     }
 
 
@@ -172,9 +179,17 @@ def _run_groq_loop(
 
     settings = get_settings()
     messages: list[dict[str, Any]] = [{"role": "system", "content": get_system_prompt()}]
-    for m in session.get("messages", [])[-20:]:
+    recent_messages = session.get("messages", [])[-20:]
+    for m in recent_messages:
         messages.append({"role": m["role"], "content": m["content"]})
-    messages.append({"role": "user", "content": user_message})
+    # run_agent_turn stores the current user message before entering this loop.
+    # Append only for defensive direct callers so Groq never sees it twice.
+    last_message = recent_messages[-1] if recent_messages else {}
+    if (
+        last_message.get("role") != "user"
+        or last_message.get("content") != user_message
+    ):
+        messages.append({"role": "user", "content": user_message})
 
     proposal_id_from_tools: str | None = session.get("proposal_id")
     tool_trace: list[str] = []
@@ -193,6 +208,7 @@ def _run_groq_loop(
                 "reply": f"I couldn't reach the AI service ({exc}). Try again shortly.",
                 "proposal_id": proposal_id_from_tools,
                 "tool_trace": tool_trace,
+                "tool_used": "groq_error",
                 "error": str(exc),
             }
 
@@ -247,12 +263,14 @@ def _run_groq_loop(
             "reply": reply,
             "proposal_id": proposal_id_from_tools,
             "tool_trace": tool_trace,
+            "tool_used": "groq",
         }
 
     return {
         "reply": "I need a moment — please try again or simplify your request.",
         "proposal_id": proposal_id_from_tools,
         "tool_trace": tool_trace,
+        "tool_used": "groq",
     }
 
 
@@ -301,6 +319,8 @@ def run_agent_turn(
             "session_id": sid,
             "reply": gate_reply,
             "handled_by": gate.get("handled_by"),
+            "model": None,
+            "tool_trace": [],
             "proposal": gate.get("proposal"),
             "checkout": gate.get("checkout"),
             "payment": gate.get("payment"),
@@ -334,21 +354,27 @@ def run_agent_turn(
     append_message(session, "assistant", reply)
     save(session)
 
+    handled_by = agent_result.get("tool_used", "groq")
+    tool_trace = agent_result.get("tool_trace", [])
     log_event(
         "agent_reply",
         user_id=uid,
         session_id=sid,
         proposal_id=pid,
         payload={
-            "tool_trace": agent_result.get("tool_trace", []),
-            "fallback": agent_result.get("tool_used") == "fallback",
+            "handled_by": handled_by,
+            "model": settings.llm_model if handled_by == "groq" else None,
+            "tool_trace": tool_trace,
+            "fallback": handled_by.startswith("fallback"),
         },
     )
 
     return {
         "session_id": sid,
         "reply": reply,
-        "handled_by": agent_result.get("tool_used", "groq"),
+        "handled_by": handled_by,
+        "model": settings.llm_model if handled_by == "groq" else None,
+        "tool_trace": tool_trace,
         "proposal": proposal_data,
         "checkout": None,
         "payment": None,

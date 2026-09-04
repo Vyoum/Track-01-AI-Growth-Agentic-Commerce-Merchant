@@ -10,6 +10,7 @@ export default function DecisionCenter({
   proposal,
   checkoutResult,
   audit,
+  agentTrace,
   userRequest,
   loading,
 }) {
@@ -19,6 +20,7 @@ export default function DecisionCenter({
     proposal,
     checkoutResult,
     audit,
+    agentTrace,
     userRequest,
   });
 
@@ -36,6 +38,28 @@ export default function DecisionCenter({
         <h3>USER REQUEST</h3>
         <p className="dc-quote">&ldquo;{view.userRequest}&rdquo;</p>
       </div>
+
+      {view.languageAgent && (
+        <div className="dc-block dc-language-agent">
+          <h3>LANGUAGE AGENT</h3>
+          <p className={view.languageAgent.groqVerified ? "dc-pass" : "dc-pending"}>
+            {view.languageAgent.groqVerified
+              ? "✓ Groq tool call verified"
+              : "Deterministic fallback used"}
+          </p>
+          {view.languageAgent.model && (
+            <p className="dc-meta">Model: {view.languageAgent.model}</p>
+          )}
+          <p className="dc-meta dc-mono">
+            Tool trace: {view.languageAgent.tools.length
+              ? view.languageAgent.tools.join(" → ")
+              : "no model tool call"}
+          </p>
+          <p className="dc-meta">
+            Authority: request proposal only · no pricing or payment control
+          </p>
+        </div>
+      )}
 
       <div className="dc-block">
         <h3>BASE CART</h3>

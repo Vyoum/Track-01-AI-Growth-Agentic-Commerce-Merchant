@@ -108,6 +108,8 @@ def test_groq_optional() -> None:
         session_id=session_id,
     )
     assert r.get("reply"), "expected Groq reply"
+    assert r.get("handled_by") == "groq", r.get("handled_by")
+    assert r.get("tool_trace"), "expected at least one Groq-selected tool"
     assert r.get("proposal") is not None, "expected proposal from Groq tool loop"
 
     proposal = r["proposal"]
@@ -130,6 +132,7 @@ def test_groq_optional() -> None:
         raise AssertionError(f"unexpected proposal_source: {source}")
 
     print("groq ok:", r["reply"][:120])
+    print("groq tool trace:", " -> ".join(r["tool_trace"]))
     print(f"groq proposal: source={source} total={total} status={status}")
 
 

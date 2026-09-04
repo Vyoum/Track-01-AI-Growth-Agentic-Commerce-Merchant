@@ -12,6 +12,7 @@ import {
   fetchMeta,
   fetchProposalAudit,
   openRazorpayCheckout,
+  sendChat,
   verifyPayment,
 } from "./api.js";
 
@@ -105,6 +106,7 @@ export default function DemoPage() {
   const [checkoutResult, setCheckoutResult] = useState(null);
   const [audit, setAudit] = useState(null);
   const [outcome, setOutcome] = useState(null);
+  const [agentProof, setAgentProof] = useState(null);
   const [awaitingMerchant, setAwaitingMerchant] = useState(false);
   const [totalMs, setTotalMs] = useState(null);
 
@@ -162,9 +164,12 @@ export default function DemoPage() {
     setCheckoutResult(null);
     setAudit(null);
     setOutcome(null);
+    setAgentProof(null);
     setTotalMs(null);
     stepSeq.current = 0;
     const runStart = performance.now();
+    const scenarioInput = scenario.build(meta?.demo_user_id || "demo_user_01");
+    const judgeSessionId = `judge_${Date.now()}`;
 
     try {
       addStep({
@@ -175,30 +180,96 @@ export default function DemoPage() {
       });
       await sleep(pace);
 
-      // 1. Baseline cart
+      // 1. Let the language agent interpret the request and select a bounded tool.
       let key = beginStep({
-        actor: "ORCHESTRATOR",
-        title: "Assembling baseline cart",
+        actor: meta?.features?.agent ? "GROQ" : "FALLBACK",
+        title: meta?.features?.agent
+          ? "Interpreting intent and selecting tools"
+          : "Groq not configured — running transparent fallback",
       });
       let t0 = performance.now();
-      let current = await createProposal({
-        ...scenario.build(meta?.demo_user_id || "demo_user_01"),
-        session_id: `judge_${Date.now()}`,
-      });
+      let agentResult;
+      try {
+        agentResult = await sendChat(
+          scenario.request,
+          judgeSessionId,
+          scenarioInput.user_id
+        );
+      } catch (agentError) {
+        agentResult = {
+          handled_by: "agent_api_error",
+          model: null,
+          tool_trace: [],
+          proposal: null,
+          reply: agentError.message || "Language agent unavailable",
+        };
+      }
+
+      let current = agentResult.proposal;
+      if (!current) {
+        current = await createProposal({
+          ...scenarioInput,
+          session_id: judgeSessionId,
+        });
+      }
+
+      const toolTrace = Array.isArray(agentResult.tool_trace)
+        ? agentResult.tool_trace
+        : [];
+      const groqProved =
+        agentResult.handled_by === "groq" &&
+        toolTrace.length > 0 &&
+        Boolean(agentResult.proposal);
+      const fallbackHandled = String(agentResult.handled_by || "").startsWith(
+        "fallback"
+      );
+      const languageActor = groqProved ? "GROQ" : "FALLBACK";
+      const proof = {
+        handledBy: agentResult.handled_by || "unknown",
+        model: groqProved ? agentResult.model : null,
+        toolTrace,
+        groqProved,
+      };
+      setAgentProof(proof);
+
       endStep(key, {
+        actor: languageActor,
         ms: Math.round(performance.now() - t0),
+        title: groqProved
+          ? "Groq interpreted the request and selected tools"
+          : fallbackHandled
+            ? "Deterministic fallback interpreted the supported request"
+            : "Deterministic recovery completed the request",
+        detail: groqProved
+          ? `Groq chose ${toolTrace.join(" → ")}`
+          : fallbackHandled
+            ? `Groq was unavailable; the fallback invoked ${toolTrace.join(" → ") || "a bounded proposal path"}.`
+            : `${agentResult.reply || "The language layer returned no proposal."} A bounded scenario request recovered the run.`,
+        notes: [
+          `Backend evidence: handled_by=${agentResult.handled_by || "unknown"}`,
+          `Tool trace: ${toolTrace.length ? toolTrace.join(" → ") : "no model tool call"}`,
+          "Authority boundary: the language layer can request a proposal; it cannot set prices, approve offers, or charge.",
+        ],
+      });
+      await sleep(pace);
+
+      // 2. The deterministic checkout core validates and prices the proposal.
+      addStep({
+        actor: "CHECKOUT CORE",
+        title: "Server-priced proposal assembled",
         detail: `${current.items
           .map((i) => `${i.name} ${inr(i.line_total_inr)}`)
           .join(" + ")} = ${inr(current.total_inr)}`,
         notes: [
           `Source: ${current.source_reason}`,
-          `Guardrails: ${current.items.length} line(s) priced from live catalog, stock checked`,
+          `Guardrails: ${current.items.length} line(s) priced from the current catalog, stock checked`,
+          "No model-supplied SKU, price, total, or payment instruction is trusted.",
         ],
       });
       setProposal(current);
       await sleep(pace);
 
-      // 2. Opportunity + campaign
+      // 3. Opportunity + campaign
       const campaign = current.campaign_decision;
       if (campaign) {
         addStep({
@@ -448,9 +519,9 @@ export default function DemoPage() {
           <p className="eyebrow">Razorpay Buildathon · Track 01 · Judge Mode</p>
           <h1>One purchase, every decision visible</h1>
           <p className="sub">
-            A single customer request runs end to end. Each stage below is a real
-            API call against the checkout core — actor, reasoning and latency as
-            it happens.
+            The request goes through live Groq tool calling when available, with
+            fallback labelled explicitly. Deterministic checkout code then controls
+            every money action. The timeline shows runtime proof, gates, and latency.
           </p>
         </div>
         <div className="status-pill" data-ok={health?.status === "ok"}>
@@ -463,6 +534,63 @@ export default function DemoPage() {
       </header>
 
       <NavBar current="/demo" />
+
+      <section className="panel demo-agent-boundary" aria-label="AI authority boundary">
+        <div className="demo-boundary-head">
+          <div>
+            <p className="merchant-eyebrow">Visible AI authority boundary</p>
+            <h2>Groq chooses tools. Deterministic code controls money.</h2>
+          </div>
+          <span
+            className="demo-proof-badge"
+            data-state={
+              agentProof
+                ? agentProof.groqProved
+                  ? "groq"
+                  : "fallback"
+                : "waiting"
+            }
+          >
+            {agentProof
+              ? agentProof.groqProved
+                ? "GROQ TOOL CALL VERIFIED"
+                : "FALLBACK SHOWN HONESTLY"
+              : meta?.features?.agent
+                ? "GROQ CONFIGURED · RUN TO VERIFY"
+                : meta
+                  ? "GROQ NOT CONFIGURED · FALLBACK READY"
+                  : "CHECKING GROQ CONFIGURATION"}
+          </span>
+        </div>
+
+        <div className="demo-boundary-flow">
+          <div className="demo-boundary-card" data-layer="language">
+            <span>1 · LANGUAGE LAYER</span>
+            <strong>
+              {agentProof?.groqProved
+                ? "Groq"
+                : "Groq tool calling + explicit fallback"}
+            </strong>
+            <p>Interprets the customer request and selects only permitted tools.</p>
+            <code>
+              {agentProof?.toolTrace?.length
+                ? agentProof.toolTrace.join(" → ")
+                : "/api/chat → tool selection"}
+            </code>
+          </div>
+          <span className="demo-boundary-arrow" aria-hidden="true">→</span>
+          <div className="demo-boundary-card" data-layer="money">
+            <span>2 · MONEY AUTHORITY</span>
+            <strong>Deterministic checkout core</strong>
+            <p>Reprices from catalog, checks policy, and requires explicit approvals.</p>
+            <code>catalog → guardrails → gates → Razorpay</code>
+          </div>
+        </div>
+        <p className="demo-boundary-rule">
+          Groq has no payment tool and cannot set a SKU, price, total, merchant
+          decision, or payment authorization.
+        </p>
+      </section>
 
       <section className="panel demo-controls">
         <div className="demo-control-grid">
@@ -504,7 +632,7 @@ export default function DemoPage() {
             Auto-approve merchant gate
           </label>
           <button type="button" onClick={run} disabled={running}>
-            {running ? "Running…" : "Run the full demo"}
+            {running ? "Running…" : "Run live agent demo"}
           </button>
         </div>
         {!autoApprove && (
@@ -527,7 +655,7 @@ export default function DemoPage() {
 
           {steps.length === 0 ? (
             <p className="muted">
-              Press <strong>Run the full demo</strong>. Nothing is pre-recorded —
+              Press <strong>Run live agent demo</strong>. Nothing is pre-recorded —
               the timeline is built from live responses.
             </p>
           ) : (
@@ -589,6 +717,7 @@ export default function DemoPage() {
               proposal={proposal}
               checkoutResult={checkoutResult}
               audit={audit}
+              agentTrace={agentProof}
               userRequest={scenario.request}
               loading={running}
             />

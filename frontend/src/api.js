@@ -44,11 +44,11 @@ export function fetchMeta() {
   return getJson("/api/meta");
 }
 
-export function sendChat(message, sessionId) {
+export function sendChat(message, sessionId, userId = "demo_user_01") {
   return postJson("/api/chat", {
     message,
     session_id: sessionId || undefined,
-    user_id: "demo_user_01",
+    user_id: userId,
   });
 }
 

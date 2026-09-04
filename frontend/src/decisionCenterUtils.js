@@ -34,11 +34,21 @@ export function buildDecisionCenterView({
   proposal,
   checkoutResult,
   audit,
+  agentTrace,
   userRequest,
 }) {
   const trace = audit?.decision_trace;
   const checks = trace?.checks || audit?.checks || [];
   const gateTraces = audit?.gate_traces || [];
+  const recordedAgentEvent = [...(audit?.events || [])]
+    .reverse()
+    .find((event) => event.event_type === "agent_reply");
+  const recordedAgent = recordedAgentEvent?.payload || {};
+  const agentHandledBy = agentTrace?.handledBy || recordedAgent.handled_by;
+  const agentTools = agentTrace?.toolTrace || recordedAgent.tool_trace || [];
+  const groqVerified =
+    agentTrace?.groqProved ??
+    (agentHandledBy === "groq" && agentTools.length > 0);
 
   const baseline =
     proposal?.baseline_total_inr ??
@@ -165,6 +175,14 @@ export function buildDecisionCenterView({
       userRequest ||
       trace?.user_request ||
       'Order my usual, under ₹800',
+    languageAgent: agentHandledBy
+      ? {
+          handledBy: agentHandledBy,
+          groqVerified,
+          model: agentTrace?.model || recordedAgent.model || null,
+          tools: agentTools,
+        }
+      : null,
     baseCart: {
       total: baseline,
       source: formatSource(proposal?.proposal_source),

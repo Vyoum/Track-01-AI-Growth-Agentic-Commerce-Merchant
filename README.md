@@ -71,7 +71,9 @@ The same application supports two intentionally different data modes.
 
 ### 1. Frozen mock demo
 
-Use this mode for the deterministic Buildathon hero story and automated evaluation.
+Use this mode for a repeatable catalog/history dataset and automated evaluation. When
+Groq is configured, Judge Mode still sends the natural-language request through the
+real tool-calling agent before the deterministic commerce plane executes it.
 
 | Step | Result |
 |---|---|
@@ -564,7 +566,7 @@ Customer accept/decline behaviour in replay batches is simulated and is labelled
 
 | Route | Audience | Purpose |
 |---|---|---|
-| `/demo` | Judges | Guided end-to-end timeline with actors, decisions, latency, payment, and audit |
+| `/demo` | Judges | Guided live run showing Groq/fallback provenance, selected tools, deterministic money authority, gates, payment, and audit |
 | `/` | Customer | Conversational checkout plus order summary and decision trace |
 | `/growth` | Merchant/judge | Audit-derived funnel, GMV, uplift, safety, and synthetic replay |
 | `/merchant` | Merchant | Enable or pause growth templates and inspect campaign policy |
@@ -648,6 +650,9 @@ npm run dev
 | `LLM_BASE_URL` | OpenAI-compatible provider URL | Groq API URL |
 
 Without a Groq key, deterministic “usual” checkout and all payment gates remain available through the fallback path.
+`POST /api/chat` returns `handled_by`, `model`, and `tool_trace`, so the UI and audit
+trail distinguish a verified Groq tool call from deterministic fallback instead of
+inferring AI participation from configuration alone.
 
 ### Razorpay
 
@@ -740,6 +745,20 @@ Example request:
 }
 ```
 
+The response includes explicit execution provenance:
+
+```json
+{
+  "handled_by": "groq",
+  "model": "openai/gpt-oss-120b",
+  "tool_trace": ["get_usual_order", "create_proposal_from_usual"]
+}
+```
+
+`handled_by=fallback` is reported when the fixed recovery path is used. Tool names
+show what was requested; all returned products, prices, totals, gates, and payment
+state are still resolved by deterministic server code.
+
 ### Proposals and checkout
 
 | Method | Endpoint | Purpose |
@@ -805,12 +824,13 @@ The example total must be replaced with the current stored proposal total in liv
 
 1. Start in **Judge Mode** at `/demo`.
 2. Run the frozen mock “returning customer under ₹800” scenario.
-3. Point out that the baseline, recommendation, guardrails, add-on decision, payment gate, and verification are separate real API calls.
-4. Open the **AI Commerce Trace** and show candidate reasons and gate checks.
-5. Open `/guardrails` and run the invented-SKU and concurrent-confirm attacks.
-6. Open `/growth`, run a 25-session batch, and distinguish synthetic acceptance from real pipeline enforcement.
-7. Open `/a2a`, show the well-known manifest, and run the independent buyer agent.
-8. If Razorpay test keys are configured, finish one human checkout in the Razorpay modal and show the verified payment event.
+3. Point to **GROQ TOOL CALL VERIFIED**, the returned model name, and the exact tool trace. If Groq is unavailable, point out the honestly labelled fallback instead.
+4. Show the boundary immediately beside it: Groq interprets and selects tools; the checkout core owns catalog repricing, guardrails, approvals, and payment.
+5. Open the **AI Commerce Trace** and show the same language-agent provenance plus candidate reasons and gate checks.
+6. Open `/guardrails` and run the invented-SKU and concurrent-confirm attacks.
+7. Open `/growth`, run a 25-session batch, and distinguish synthetic acceptance from real pipeline enforcement.
+8. Open `/a2a`, show the well-known manifest, and run the independent buyer agent.
+9. If Razorpay test keys are configured, finish one human checkout in the Razorpay modal and show the verified payment event.
 
 ### Frozen hero flow using HTTP
 

@@ -925,6 +925,121 @@ hr {
   max-width: 1240px;
 }
 
+.demo-agent-boundary {
+  min-height: unset;
+  margin-bottom: 18px;
+  border-color: #453a6b;
+  background:
+    linear-gradient(115deg, rgb(69 58 107 / 20%), transparent 42%),
+    color-mix(in srgb, var(--panel) 94%, black);
+}
+
+.demo-boundary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.demo-boundary-head .merchant-eyebrow {
+  margin-bottom: 5px;
+  color: #c4b5fd;
+}
+
+.demo-boundary-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.demo-proof-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #9ab0a6;
+  background: #0c1210;
+  font-family: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.demo-proof-badge[data-state="groq"] {
+  color: #c4b5fd;
+  border-color: #7766b5;
+  background: #171329;
+}
+
+.demo-proof-badge[data-state="fallback"] {
+  color: #fbbf24;
+  border-color: #92640a;
+  background: #201a0c;
+}
+
+.demo-boundary-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.demo-boundary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0c1210;
+}
+
+.demo-boundary-card[data-layer="language"] {
+  border-color: #453a6b;
+}
+
+.demo-boundary-card[data-layer="money"] {
+  border-color: #3d6c52;
+}
+
+.demo-boundary-card > span {
+  color: #8ea396;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.demo-boundary-card strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.demo-boundary-card p {
+  margin: 0;
+  color: #9ab0a6;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.demo-boundary-card code {
+  overflow-wrap: anywhere;
+  color: #cfe6d8;
+  font-size: 0.72rem;
+}
+
+.demo-boundary-arrow {
+  align-self: center;
+  color: #6ee7a8;
+  font-size: 1.25rem;
+}
+
+.demo-boundary-rule {
+  margin: 12px 0 0;
+  color: #f2d58a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .demo-controls {
   min-height: unset;
   margin-bottom: 18px;
@@ -1108,6 +1223,23 @@ hr {
 .tl-actor[data-actor="ORCHESTRATOR"] {
   color: #c4b5fd;
   border-color: #453a6b;
+}
+
+.tl-actor[data-actor="GROQ"] {
+  color: #d8ccff;
+  border-color: #7766b5;
+  background: #171329;
+}
+
+.tl-actor[data-actor="FALLBACK"] {
+  color: #fbbf24;
+  border-color: #92640a;
+  background: #201a0c;
+}
+
+.tl-actor[data-actor="CHECKOUT CORE"] {
+  color: #8ce6b2;
+  border-color: #3d6c52;
 }
 
 .tl-actor[data-actor="GROWTH"] {
@@ -1323,6 +1455,19 @@ hr {
   .demo-layout,
   .growth-layout {
     grid-template-columns: 1fr;
+  }
+
+  .demo-boundary-head {
+    flex-direction: column;
+  }
+
+  .demo-boundary-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-boundary-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
   }
 
   .funnel-row {
