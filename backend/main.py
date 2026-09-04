@@ -59,26 +59,28 @@ def root() -> RedirectResponse:
 
 @app.get("/health")
 def health() -> dict:
-    razorpay_ready = keys_are_usable(settings)
+    current_settings = get_settings()
+    razorpay_ready = keys_are_usable(current_settings)
+    catalog_status = store_source.source_status()
     return {
         "status": "ok",
-        "app_env": settings.app_env,
-        "razorpay_mode": settings.razorpay_mode,
-        "use_mock_catalog": settings.use_mock_catalog,
-        "catalog_source": store_source.source_label(),
-        "store_provider": settings.resolved_store_provider,
-        "store_api_configured": bool(settings.store_api_base_url.strip()),
+        "app_env": current_settings.app_env,
+        "razorpay_mode": current_settings.razorpay_mode,
+        "use_mock_catalog": current_settings.use_mock_catalog,
+        **catalog_status,
+        "store_provider": current_settings.resolved_store_provider,
+        "store_api_configured": bool(current_settings.store_api_base_url.strip()),
         "supabase_configured": bool(
-            settings.effective_supabase_url.strip()
-            and settings.effective_supabase_key.strip()
+            current_settings.effective_supabase_url.strip()
+            and current_settings.effective_supabase_key.strip()
         ),
-        "demo_user_id": settings.demo_user_id,
+        "demo_user_id": current_settings.demo_user_id,
         "db_path": getattr(app.state, "db_path", None),
         "started_at": getattr(app.state, "started_at", None),
-        "razorpay_key_configured": bool(settings.razorpay_key_id),
+        "razorpay_key_configured": bool(current_settings.razorpay_key_id),
         "razorpay_key_is_test": (
-            settings.razorpay_key_id.startswith("rzp_test_")
-            if settings.razorpay_key_id
+            current_settings.razorpay_key_id.startswith("rzp_test_")
+            if current_settings.razorpay_key_id
             else None
         ),
         "razorpay_test_ready": razorpay_ready,
@@ -88,17 +90,19 @@ def health() -> dict:
 
 @app.get("/api/meta")
 def meta() -> dict:
-    razorpay_ready = keys_are_usable(settings)
-    source = store_source.source_label()
+    current_settings = get_settings()
+    razorpay_ready = keys_are_usable(current_settings)
+    catalog_status = store_source.source_status()
+    source = catalog_status["catalog_source"]
     return {
-        "merchant": "Demo Fitness Store",
+        "merchant": current_settings.merchant_name,
         "track": "Track 01 — AI Growth & Agentic Commerce",
-        "demo_user_id": settings.demo_user_id,
+        "demo_user_id": current_settings.demo_user_id,
         "currency": "INR",
-        "catalog_source": source,
+        **catalog_status,
         "features": {
             "chat": True,
-            "agent": bool(settings.effective_llm_api_key),
+            "agent": bool(current_settings.effective_llm_api_key),
             "growth": True,
             "campaigns": True,
             "merchant_approval": True,
@@ -114,7 +118,7 @@ def meta() -> dict:
             f"Catalog source: {source}. "
             + (
                 "Chat agent ready (Groq). Try: 'Order my usual, under ₹800'."
-                if settings.effective_llm_api_key
+                if current_settings.effective_llm_api_key
                 else "Add GROQ_API_KEY for full chat; gates + fallback still work."
             )
             + " Growth campaigns require merchant approval before customer offer."

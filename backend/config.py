@@ -189,6 +189,21 @@ class Settings(BaseSettings):
         return "mock"
 
     @property
+    def live_merchant_configured(self) -> bool:
+        """Whether requests are configured to use a real merchant catalog."""
+        if self.use_mock_catalog:
+            return False
+        if self.resolved_store_provider == "supabase":
+            return bool(self.effective_supabase_url and self.effective_supabase_key)
+        if self.resolved_store_provider == "rest":
+            return bool(self.store_api_base_url.strip())
+        return False
+
+    @property
+    def merchant_name(self) -> str:
+        return "Live Ethnic Store" if self.live_merchant_configured else "Demo Fitness Store"
+
+    @property
     def sqlite_path(self) -> Path:
         url = self.database_url
         if url.startswith("sqlite:///"):

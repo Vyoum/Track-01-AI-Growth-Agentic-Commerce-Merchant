@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 
 from backend.config import get_settings
 from backend.db import init_db
-from backend.integrations.client_store_client import reset_store_client
+from backend.integrations.client_store_client import MerchantStoreError, reset_store_client
 from backend.integrations.razorpay_client import reset_razorpay_client
 from backend.main import app
+from backend.services import store_source
 from backend.services.data_loader import reload_demo_data
 from backend.services.demo_replay import _plan_scenarios
 
@@ -36,6 +37,7 @@ class DemoEndpointTests(unittest.TestCase):
         get_settings.cache_clear()
         reset_store_client()
         reset_razorpay_client()
+        store_source.reset_source_status()
         reload_demo_data()
         init_db()
         self.client = TestClient(app)
@@ -46,7 +48,77 @@ class DemoEndpointTests(unittest.TestCase):
         get_settings.cache_clear()
         reset_store_client()
         reset_razorpay_client()
+        store_source.reset_source_status()
         self._tmp.cleanup()
+
+    def test_health_reports_temporary_mock_fallback(self) -> None:
+        class UnavailableMerchant:
+            def list_products(self, query="", category=None):
+                del query, category
+                raise MerchantStoreError("merchant temporarily unavailable")
+
+        with patch.dict(
+            os.environ,
+            {
+                "USE_MOCK_CATALOG": "false",
+                "STORE_PROVIDER": "rest",
+                "STORE_API_BASE_URL": "https://merchant.invalid",
+                "STORE_FALLBACK_TO_MOCK": "true",
+            },
+        ):
+            get_settings.cache_clear()
+            reset_store_client()
+            store_source.reset_source_status()
+            with patch.object(
+                store_source,
+                "get_store_client",
+                return_value=UnavailableMerchant(),
+            ):
+                products = store_source.list_products()
+
+            self.assertGreater(len(products), 0)
+            health = self.client.get("/health").json()
+            self.assertEqual(health["configured_catalog_source"], "merchant_api")
+            self.assertEqual(health["catalog_source"], "mock_json")
+            self.assertTrue(health["catalog_fallback_active"])
+            self.assertIn("temporary mock data", health["catalog_fallback_reason"])
+
+            class RecoveredMerchant:
+                def list_products(self, query="", category=None):
+                    del query, category
+                    return products
+
+            with patch.object(
+                store_source,
+                "get_store_client",
+                return_value=RecoveredMerchant(),
+            ):
+                store_source.list_products()
+
+            recovered_health = self.client.get("/health").json()
+            self.assertEqual(recovered_health["catalog_source"], "merchant_api")
+            self.assertFalse(recovered_health["catalog_fallback_active"])
+            self.assertIsNone(recovered_health["catalog_fallback_reason"])
+
+    def test_merchant_name_tracks_live_catalog_configuration(self) -> None:
+        with patch.dict(os.environ, {"USE_MOCK_CATALOG": "true"}):
+            get_settings.cache_clear()
+            self.assertEqual(self.client.get("/api/meta").json()["merchant"], "Demo Fitness Store")
+
+        with patch.dict(
+            os.environ,
+            {
+                "USE_MOCK_CATALOG": "false",
+                "STORE_PROVIDER": "supabase",
+                "SUPABASE_URL": "https://merchant.supabase.co",
+                "SUPABASE_KEY": "test-merchant-key",
+            },
+        ):
+            get_settings.cache_clear()
+            store_source.reset_source_status()
+            self.assertEqual(self.client.get("/api/meta").json()["merchant"], "Live Ethnic Store")
+            manifest = self.client.get("/.well-known/agent-catalog.json").json()
+            self.assertEqual(manifest["merchant"], "Live Ethnic Store")
 
     def test_metrics_are_zeroed_on_a_fresh_database(self) -> None:
         body = self.client.get("/api/metrics/growth").json()

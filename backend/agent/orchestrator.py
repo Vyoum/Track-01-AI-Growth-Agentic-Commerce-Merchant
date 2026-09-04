@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from backend.agent.gates import try_gate_action
-from backend.agent.prompts import SYSTEM_PROMPT
+from backend.agent.prompts import get_system_prompt
 from backend.agent.session import append_message, get_or_create, save
 from backend.agent.tool_runner import run_tool
 from backend.agent.tools_schema import TOOL_DEFINITIONS
@@ -171,7 +171,7 @@ def _run_groq_loop(
         return _fallback_reply(user_id, user_message, session)
 
     settings = get_settings()
-    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": get_system_prompt()}]
     for m in session.get("messages", [])[-20:]:
         messages.append({"role": m["role"], "content": m["content"]})
     messages.append({"role": "user", "content": user_message})

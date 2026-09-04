@@ -899,6 +899,7 @@ def _growth_summary(proposal: Proposal) -> dict:
 
 
 def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
+    from backend.config import get_settings
     from backend.integrations.razorpay_client import get_razorpay_client
 
     client = get_razorpay_client()
@@ -907,7 +908,7 @@ def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
         "order_id": payment.razorpay_order_id,
         "amount_paise": payment.amount_inr * 100,
         "currency": "INR",
-        "name": "Demo Fitness Store",
+        "name": get_settings().merchant_name,
         "description": proposal.line_summary[:120],
         "prefill": {"name": "Aisha Khan"},
         "notes": {

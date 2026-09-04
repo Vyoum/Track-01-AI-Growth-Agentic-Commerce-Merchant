@@ -23,7 +23,7 @@ def agent_catalog_manifest() -> JSONResponse:
 
     return JSONResponse(
         {
-            "merchant": "Demo Fitness Store",
+            "merchant": settings.merchant_name,
             "catalog_url": "/api/products",
             "checkout_protocol": "proposal-confirm-v1",
             "currency": "INR",
