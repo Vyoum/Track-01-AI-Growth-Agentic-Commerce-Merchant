@@ -3,7 +3,7 @@ import ChatWindow from "./ChatWindow.jsx";
 import DecisionCenter from "./DecisionCenter.jsx";
 import NavBar from "./NavBar.jsx";
 import OrderSummaryCard from "./OrderSummaryCard.jsx";
-import { fetchMeta, fetchHealth, fetchProposalAudit } from "./api.js";
+import { fetchMeta, fetchHealth, fetchProposal, fetchProposalAudit } from "./api.js";
 
 export default function App() {
   const [meta, setMeta] = useState(null);
@@ -45,6 +45,32 @@ export default function App() {
       loadAudit(proposal.id);
     }
   }, [proposal?.id, proposal?.status, checkoutResult?.payment?.status, loadAudit]);
+
+  useEffect(() => {
+    if (
+      !proposal?.id ||
+      !["awaiting_addon_decision", "awaiting_merchant_approval"].includes(
+        proposal.status
+      )
+    ) {
+      return undefined;
+    }
+    const id = setInterval(async () => {
+      try {
+        const latest = await fetchProposal(proposal.id);
+        setProposal((prev) => {
+          if (!prev || prev.id !== latest.id) return prev;
+          if (prev.status === latest.status && !prev.growth_offer === !latest.growth_offer) {
+            return prev;
+          }
+          return latest;
+        });
+      } catch {
+        /* keep local snapshot */
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [proposal?.id, proposal?.status]);
 
   const showDecisionCenter =
     proposal &&

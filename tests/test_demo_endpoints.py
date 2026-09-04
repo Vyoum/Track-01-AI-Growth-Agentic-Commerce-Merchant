@@ -100,7 +100,7 @@ class DemoEndpointTests(unittest.TestCase):
         # The safety invariant the scoreboard advertises.
         self.assertEqual(safety["unauthorized_charges"], 0)
         self.assertEqual(safety["explicitly_gated_pct"], 100.0)
-        self.assertGreater(safety["guardrail_blocks"], 0)
+        self.assertGreater(funnel["offers_reaching_customer"], 0)
 
     def test_replay_is_deterministic_for_a_fixed_seed(self) -> None:
         first = self.client.post(
@@ -126,6 +126,66 @@ class DemoEndpointTests(unittest.TestCase):
             self.client.post("/api/demo/replay", json={"sessions": 0}).status_code,
             422,
         )
+
+    def test_enabled_template_skips_per_checkout_merchant_click(self) -> None:
+        created = self.client.post(
+            "/api/proposals",
+            json={
+                "user_id": "demo_user_01",
+                "use_usual": True,
+                "stated_budget_inr": 800,
+                "with_growth": True,
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        body = created.json()
+        self.assertEqual(body["status"], "awaiting_addon_decision")
+        self.assertEqual(
+            body["campaign_decision"]["approval_mode"],
+            "template_policy",
+        )
+        pending = self.client.get("/api/merchant/campaigns/pending").json()
+        self.assertEqual(pending["count"], 0)
+
+    def test_paused_template_hides_addon_without_a_merchant_queue(self) -> None:
+        first = self.client.post(
+            "/api/proposals",
+            json={
+                "user_id": "demo_user_01",
+                "use_usual": True,
+                "stated_budget_inr": 800,
+                "with_growth": True,
+            },
+        ).json()
+        campaign_id = first["campaign_decision"]["campaign_id"]
+        paused = self.client.post(
+            f"/api/merchant/campaigns/{campaign_id}/policy",
+            json={"status": "paused", "note": "test pause"},
+        )
+        self.assertEqual(paused.status_code, 200, paused.text)
+        self.assertGreaterEqual(paused.json().get("offers_retracted", 0), 1)
+
+        live = self.client.get(f"/api/proposals/{first['id']}").json()
+        self.assertIsNone(live.get("growth_offer"))
+        self.assertEqual(live["status"], "awaiting_confirmation")
+
+        second = self.client.post(
+            "/api/proposals",
+            json={
+                "user_id": "demo_user_01",
+                "use_usual": True,
+                "stated_budget_inr": 800,
+                "with_growth": True,
+            },
+        ).json()
+        self.assertEqual(second["status"], "awaiting_confirmation")
+        self.assertIsNone(second.get("growth_offer"))
+        self.assertEqual(
+            (second.get("campaign_decision") or {}).get("merchant_approval_status"),
+            "paused",
+        )
+        pending = self.client.get("/api/merchant/campaigns/pending").json()
+        self.assertEqual(pending["count"], 0)
 
 
 if __name__ == "__main__":

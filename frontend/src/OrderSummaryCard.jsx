@@ -28,9 +28,9 @@ export default function OrderSummaryCard({
     try {
       const p = await createUsualProposal(800);
       setProposal(p);
-      if (p.status === "awaiting_merchant_approval") {
+      if (p.status === "awaiting_merchant_approval" || p.campaign_decision?.merchant_approval_status === "paused") {
         setMessage(
-          "Optional add-on is waiting for store approval. Open Merchant to release it."
+          "Optional add-on is waiting for the store. Open Merchant to enable the template, then start a new order."
         );
       } else {
         setMessage(p.growth_offer?.offer_text || "Proposal ready");
@@ -180,20 +180,22 @@ export default function OrderSummaryCard({
         </dl>
       )}
 
-      {status === "awaiting_merchant_approval" && (
+      {status === "awaiting_merchant_approval" ||
+      proposal?.campaign_decision?.merchant_approval_status === "paused" ? (
         <div className="merchant-pending">
           <p className="msg">
-            Offer pending store approval — the add-on is not shown to you yet.
+            Optional add-on is waiting on the store — it is not shown to you yet.
           </p>
           <p className="muted">
-            Demo judges: open{" "}
+            Open{" "}
             <a className="inline-link" href="/merchant">
               Merchant
             </a>{" "}
-            to release or hold the offer, then return here.
+            and enable the growth template, then come back and place the order
+            again. You can still confirm the baseline cart below.
           </p>
         </div>
-      )}
+      ) : null}
 
       {status === "awaiting_addon_decision" && (
         <div className="actions">

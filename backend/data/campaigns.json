@@ -1,45 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "known_segments": [
     "new_user_no_history",
     "returning_with_history",
     "budget_shopper"
   ],
   "campaign_guardrails": {
-    "require_merchant_approval": true,
+    "require_merchant_approval": false,
+    "require_template_enabled": true,
     "max_discount_pct": 0,
     "denied_categories": ["gift_cards", "alcohol_adjacent"]
   },
   "campaigns": [
     {
-      "id": "popular_fill_remaining",
-      "name": "Popular Budget Fit",
-      "enabled": true,
-      "opportunity": "budget_headroom",
-      "target_segment": "new_user_no_history",
-      "strategy": "popular_budget_fit",
-      "priority": 10,
-      "max_discount_pct": 0,
-      "allowed_categories": [],
-      "copy_key": "popular_budget_addon",
-      "copy_variants": ["popular_budget_addon", "popular_budget_addon_alt"]
-    },
-    {
-      "id": "new_user_bestseller_attach",
-      "name": "New User Bestseller Attach",
-      "enabled": true,
-      "opportunity": "new_user_bestseller",
-      "target_segment": "new_user_no_history",
-      "strategy": "popular_budget_fit",
-      "priority": 15,
-      "max_discount_pct": 0,
-      "allowed_categories": [],
-      "copy_key": "new_user_bestseller_addon",
-      "copy_variants": ["new_user_bestseller_addon"]
-    },
-    {
       "id": "complement_attach",
-      "name": "Complement Attach",
+      "name": "Complement add-on",
       "enabled": true,
       "opportunity": "complement_attach",
       "target_segment": "returning_with_history",
@@ -52,7 +27,7 @@
     },
     {
       "id": "category_cross_sell",
-      "name": "Category Cross-Sell",
+      "name": "Category cross-sell",
       "enabled": true,
       "opportunity": "category_cross_sell",
       "target_segment": "returning_with_history",
@@ -62,11 +37,22 @@
       "allowed_categories": [],
       "copy_key": "cross_sell_addon",
       "copy_variants": ["cross_sell_addon"]
+    },
+    {
+      "id": "new_user_bestseller_attach",
+      "name": "New user bestseller attach",
+      "enabled": true,
+      "opportunity": "new_user_bestseller",
+      "target_segment": "new_user_no_history",
+      "strategy": "popular_budget_fit",
+      "priority": 15,
+      "max_discount_pct": 0,
+      "allowed_categories": [],
+      "copy_key": "new_user_bestseller_addon",
+      "copy_variants": ["new_user_bestseller_addon"]
     }
   ],
   "copy_templates": {
-    "popular_budget_addon": "I also found {addon_name} for ₹{addon_price} — a popular pick that fits your remaining ₹{remaining} budget. Total would be ₹{projected_total}. Want me to add it?",
-    "popular_budget_addon_alt": "{addon_name} at ₹{addon_price} fits under your ₹{budget} budget (projected ₹{projected_total}). Add it?",
     "new_user_bestseller_addon": "Since you're new here, I picked a popular add-on: {addon_name} for ₹{addon_price}. Projected total ₹{projected_total}, still under ₹{budget}. Want me to add it?",
     "complement_addon": "I also found {addon_name} for ₹{addon_price}, which is {addon_reason}. Total would be ₹{projected_total}, still under your ₹{budget} budget. Want me to add it?",
     "complement_addon_alt": "Customers often add {addon_name} (₹{addon_price}) with this order. New total ₹{projected_total}. Add it?",

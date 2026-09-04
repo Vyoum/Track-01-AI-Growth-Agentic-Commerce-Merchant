@@ -84,6 +84,13 @@ export function fetchCampaignCatalog() {
   return getJson("/api/merchant/campaigns/catalog");
 }
 
+export function setCampaignPolicy(campaignId, status, note) {
+  return postJson(`/api/merchant/campaigns/${campaignId}/policy`, {
+    status,
+    note: note || undefined,
+  });
+}
+
 export function fetchAgentManifest() {
   return getJson("/.well-known/agent-catalog.json");
 }

@@ -25,7 +25,6 @@ from backend.models import (
     AddonDecisionRequest,
     ConfirmationRequest,
     CreateProposalRequest,
-    MerchantApprovalRequest,
     PaymentRecord,
     PaymentStatus,
 )
@@ -111,11 +110,8 @@ class AdversarialCheckoutTests(unittest.TestCase):
                 with_growth=True,
             )
         )
-        self.assertEqual(proposal.status.value, "awaiting_merchant_approval")
-        return checkout.decide_merchant_campaign(
-            proposal.id,
-            MerchantApprovalRequest(decision="approve", note="adversarial test"),
-        )
+        self.assertEqual(proposal.status.value, "awaiting_addon_decision")
+        return proposal
 
     def test_concurrent_double_confirm_creates_one_razorpay_order(self) -> None:
         proposal = self._ready_proposal()

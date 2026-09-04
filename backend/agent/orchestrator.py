@@ -114,11 +114,16 @@ def _fallback_reply(user_id: str, message: str, session: dict[str, Any]) -> dict
             return {"reply": f"Sorry, I couldn't build that order: {result['error']}"}
         session["proposal_id"] = result["proposal_id"]
         if result.get("status") == "awaiting_merchant_approval":
-            camp = result.get("campaign") or {}
             reply = (
                 f"{result['source_reason']}. "
-                f"A growth campaign ({camp.get('campaign_id', 'campaign')}) "
-                "is waiting for merchant approval before I can offer the add-on."
+                "An optional add-on is waiting for the store to enable it on Merchant. "
+                "I will not add it until then."
+            )
+        elif (result.get("campaign") or {}).get("merchant_approval_status") == "paused":
+            reply = (
+                f"{result['source_reason']}. "
+                "An optional add-on is waiting for the store to enable the template on Merchant. "
+                "You can still confirm payment for this baseline cart."
             )
         elif result.get("growth_offer"):
             reply = (

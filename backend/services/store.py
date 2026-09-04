@@ -210,3 +210,80 @@ def mark_payment_status(payment: PaymentRecord, status: PaymentStatus) -> Paymen
     payment.updated_at = _now()
     save_payment(payment)
     return payment
+
+
+def get_campaign_policy(campaign_id: str) -> dict[str, Any] | None:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT campaign_id, status, note, updated_at
+            FROM campaign_policies WHERE campaign_id = ?
+            """,
+            (campaign_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "campaign_id": row["campaign_id"],
+        "status": row["status"],
+        "note": row["note"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_campaign_policies() -> dict[str, dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT campaign_id, status, note, updated_at FROM campaign_policies"
+        ).fetchall()
+    return {
+        row["campaign_id"]: {
+            "campaign_id": row["campaign_id"],
+            "status": row["status"],
+            "note": row["note"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    }
+
+
+def set_campaign_policy(
+    campaign_id: str,
+    status: str,
+    note: str | None = None,
+) -> dict[str, Any]:
+    now = _now().isoformat()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO campaign_policies (campaign_id, status, note, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(campaign_id) DO UPDATE SET
+                status=excluded.status,
+                note=excluded.note,
+                updated_at=excluded.updated_at
+            """,
+            (campaign_id, status, note, now),
+        )
+        conn.commit()
+    return {
+        "campaign_id": campaign_id,
+        "status": status,
+        "note": note,
+        "updated_at": now,
+    }
+
+
+def is_campaign_template_enabled(campaign_id: str) -> bool:
+    """True when the merchant has enabled this template (or JSON default is on)."""
+    from backend.services.data_loader import load_campaigns
+
+    stored = get_campaign_policy(campaign_id)
+    if stored:
+        return stored["status"] == "enabled"
+
+    for campaign in load_campaigns().get("campaigns", []):
+        if campaign.get("id") == campaign_id:
+            return bool(campaign.get("enabled", True))
+    return False
+

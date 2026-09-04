@@ -85,16 +85,20 @@ def _proposal_tool_result(proposal) -> dict[str, Any]:
         }
     if proposal.status.value == "awaiting_merchant_approval":
         out["next_step"] = (
-            "Campaign pending merchant approval. Tell user the merchant desk must "
-            "Approve before you can offer the add-on. Do NOT ask accept/skip yet."
+            "A growth template is waiting on the merchant desk. Tell the user to "
+            "open Merchant and enable the template. Do NOT ask accept/skip. "
+            "They may still confirm the baseline cart after the store enables it "
+            "on a new proposal."
         )
-        if proposal.growth_offer:
-            out["growth_offer_pending"] = {
-                "product_id": proposal.growth_offer.product_id,
-                "name": proposal.growth_offer.name,
-                "price_inr": proposal.growth_offer.price_inr,
-                "projected_total_inr": proposal.growth_offer.projected_total_inr,
-            }
+    elif (
+        proposal.campaign_decision
+        and proposal.campaign_decision.merchant_approval_status == "paused"
+    ):
+        out["next_step"] = (
+            "The matching add-on template is paused. Tell the user: optional add-on "
+            "is waiting for the store to enable it on Merchant. Do NOT present the "
+            "add-on SKU. They can still confirm payment for the baseline cart."
+        )
     elif proposal.growth_offer and proposal.status.value == "awaiting_addon_decision":
         out["growth_offer"] = {
             "product_id": proposal.growth_offer.product_id,

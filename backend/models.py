@@ -159,12 +159,18 @@ class CampaignDecision(BaseModel):
     merchant_approval_status: str = "pending"  # pending | approved | rejected
     merchant_approved_at: datetime | None = None
     merchant_rejected_at: datetime | None = None
+    approval_mode: str = "per_checkout"  # template_policy | per_checkout
     guardrail_passed: bool = True
     guardrail_notes: list[str] = Field(default_factory=list)
 
 
 class MerchantApprovalRequest(BaseModel):
     decision: str  # "approve" | "reject"
+    note: str | None = None
+
+
+class CampaignPolicyRequest(BaseModel):
+    status: str  # "enabled" | "paused"
     note: str | None = None
 
 

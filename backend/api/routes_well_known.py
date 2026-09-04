@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from backend.config import get_settings
-from backend.services.data_loader import load_policy
+from backend.services.data_loader import load_campaigns, load_policy
 
 router = APIRouter(tags=["well-known"])
 
@@ -16,8 +16,10 @@ def agent_catalog_manifest() -> JSONResponse:
     """Robots.txt-style manifest for autonomous buyer agents."""
     settings = get_settings()
     policy = load_policy()
+    campaigns_cfg = load_campaigns()
     bounds = policy.get("bounds", {})
     gates = policy.get("gates", {})
+    campaign_guardrails = campaigns_cfg.get("campaign_guardrails", {})
 
     return JSONResponse(
         {
@@ -46,9 +48,10 @@ def agent_catalog_manifest() -> JSONResponse:
                 "requires_addon_decision_before_payment": gates.get(
                     "require_addon_decision_before_payment", True
                 ),
-                "requires_merchant_campaign_approval": policy.get(
-                    "campaign_guardrails", {}
-                ).get("require_merchant_approval", True),
+                "requires_merchant_campaign_approval": False,
+                "requires_enabled_growth_template": campaign_guardrails.get(
+                    "require_template_enabled", True
+                ),
                 "max_order_value_inr": int(bounds.get("hard_max_order_value_inr", 5000)),
                 "max_items_per_proposal": int(bounds.get("max_items_per_proposal", 5)),
                 "supports_growth_offers": True,

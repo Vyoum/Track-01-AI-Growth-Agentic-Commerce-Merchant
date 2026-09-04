@@ -26,6 +26,7 @@ from backend.models import (
     CreateProposalRequest,
     FailPaymentRequest,
     MerchantApprovalRequest,
+    CampaignPolicyRequest,
     PaymentRecord,
     PaymentStatus,
     Proposal,
@@ -39,7 +40,7 @@ from backend.services.bestsellers import (
     get_bestseller_seed,
 )
 from backend.services.campaign_orchestrator import orchestrate_campaign
-from backend.services.data_loader import load_policy
+from backend.services.data_loader import load_campaigns, load_policy
 from backend.services.growth import GrowthDecisionResult
 from backend.services.history import get_usual_order
 from backend.services import catalog, store
@@ -69,63 +70,96 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
     if result.offer and orchestration.decision:
         proposal.growth_offer = result.offer
         proposal.campaign_decision = orchestration.decision
-        # Option A: merchant must explicitly approve before customer sees the offer.
-        proposal.status = ProposalStatus.AWAITING_MERCHANT_APPROVAL
-        log_event(
-            "campaign_proposed",
-            user_id=proposal.user_id,
-            session_id=proposal.session_id,
-            proposal_id=proposal.id,
-            payload={
-                "campaign_decision": orchestration.decision.model_dump(mode="json"),
-                "opportunities": [
-                    {
-                        "id": o.id,
-                        "label": o.label,
-                        "priority": o.priority,
-                        "rationale": o.rationale,
-                        "data": o.data,
-                    }
-                    for o in orchestration.opportunities
-                ],
-                "baseline_total_inr": proposal.total_inr,
-            },
-        )
-        log_event(
-            "growth_offer_shown",
-            user_id=proposal.user_id,
-            session_id=proposal.session_id,
-            proposal_id=proposal.id,
-            payload={
-                "offer": result.offer.model_dump(),
-                "baseline_total_inr": proposal.total_inr,
-                "candidates_considered": result.metrics.candidates_considered,
-                "pending_merchant_approval": True,
-            },
-        )
-    elif result.offer:
-        # Growth found a complement / popular add-on but no campaign wrapper —
-        # still surface it for the customer (same gate as earlier add-on flow).
-        proposal.growth_offer = result.offer
-        proposal.campaign_decision = None
-        proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
-        if proposal.growth_metrics:
-            proposal.growth_metrics.recommendation_shown = True
-        log_event(
-            "growth_offer_shown",
-            user_id=proposal.user_id,
-            session_id=proposal.session_id,
-            proposal_id=proposal.id,
-            payload={
-                "offer": result.offer.model_dump(),
-                "baseline_total_inr": proposal.total_inr,
-                "candidates_considered": result.metrics.candidates_considered,
-                "pending_merchant_approval": False,
-                "campaign_skipped_reasons": orchestration.skipped_reasons,
-                "mode": "direct_addon_without_campaign",
-            },
-        )
+        campaign_id = orchestration.decision.campaign_id
+        template_on = store.is_campaign_template_enabled(campaign_id)
+        if template_on:
+            now = _now()
+            camp = orchestration.decision
+            camp.merchant_approval_status = "approved"
+            camp.merchant_approved_at = now
+            camp.approval_mode = "template_policy"
+            proposal.campaign_decision = camp
+            proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
+            if proposal.growth_metrics:
+                proposal.growth_metrics.recommendation_shown = True
+            log_event(
+                "campaign_proposed",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "campaign_decision": camp.model_dump(mode="json"),
+                    "opportunities": [
+                        {
+                            "id": o.id,
+                            "label": o.label,
+                            "priority": o.priority,
+                            "rationale": o.rationale,
+                            "data": o.data,
+                        }
+                        for o in orchestration.opportunities
+                    ],
+                    "baseline_total_inr": proposal.total_inr,
+                    "approval_mode": "template_policy",
+                },
+            )
+            log_event(
+                "campaign_template_applied",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "opportunity": camp.opportunity,
+                    "note": "Template already enabled — offer released without per-checkout click",
+                },
+            )
+            log_event(
+                "growth_offer_shown",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "offer": result.offer.model_dump(),
+                    "baseline_total_inr": proposal.total_inr,
+                    "candidates_considered": result.metrics.candidates_considered,
+                    "pending_merchant_approval": False,
+                    "approval_mode": "template_policy",
+                },
+            )
+        else:
+            camp = orchestration.decision
+            camp.merchant_approval_status = "paused"
+            proposal.campaign_decision = camp
+            proposal.growth_offer = None
+            proposal.status = ProposalStatus.AWAITING_CONFIRMATION
+            log_event(
+                "campaign_template_paused",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "opportunity": camp.opportunity,
+                    "skipped_reasons": [
+                        f"Growth template {campaign_id} is paused — enable it on /merchant"
+                    ],
+                },
+            )
+            log_event(
+                "growth_offer_none",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "skipped_reasons": [
+                        f"template {campaign_id} not enabled",
+                        *result.skipped_reasons,
+                    ]
+                },
+            )
     else:
+        # No enabled template — never leak a direct add-on around merchant policy.
         proposal.growth_offer = None
         proposal.campaign_decision = None
         proposal.status = ProposalStatus.AWAITING_CONFIRMATION
@@ -134,7 +168,9 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
             user_id=proposal.user_id,
             session_id=proposal.session_id,
             proposal_id=proposal.id,
-            payload={"skipped_reasons": result.skipped_reasons},
+            payload={
+                "skipped_reasons": orchestration.skipped_reasons or result.skipped_reasons
+            },
         )
     store.save_proposal(proposal)
     return proposal, result
@@ -205,12 +241,18 @@ def decide_merchant_campaign(
         )
         return proposal
 
-    # approve
+    # approve leftover per-checkout proposal AND enable the template going forward
     camp.merchant_approval_status = "approved"
     camp.merchant_approved_at = now
+    camp.approval_mode = "per_checkout"
     proposal.campaign_decision = camp
     proposal.status = ProposalStatus.AWAITING_ADDON_DECISION
     store.save_proposal(proposal)
+    store.set_campaign_policy(
+        camp.campaign_id,
+        "enabled",
+        note=body.note or "Enabled by approving a leftover checkout",
+    )
     log_event(
         "campaign_merchant_approved",
         user_id=proposal.user_id,
@@ -244,10 +286,129 @@ def decide_merchant_campaign(
 
 
 def list_pending_merchant_approvals(limit: int = 50) -> list[Proposal]:
-    """Return proposals awaiting merchant campaign approval (newest first)."""
+    """Return leftover per-checkout approvals (newest first)."""
     return store.list_proposals_by_status(
         ProposalStatus.AWAITING_MERCHANT_APPROVAL, limit=limit
     )
+
+
+def _retract_open_offers_for_template(campaign_id: str) -> int:
+    """Clear add-ons already sitting on open checkouts for a paused template."""
+    retracted = 0
+    for status in (
+        ProposalStatus.AWAITING_ADDON_DECISION,
+        ProposalStatus.AWAITING_MERCHANT_APPROVAL,
+    ):
+        for proposal in store.list_proposals_by_status(status, limit=200):
+            camp = proposal.campaign_decision
+            if not camp or camp.campaign_id != campaign_id:
+                continue
+            camp.merchant_approval_status = "paused"
+            camp.merchant_rejected_at = _now()
+            proposal.campaign_decision = camp
+            proposal.growth_offer = None
+            if proposal.growth_metrics:
+                proposal.growth_metrics.recommendation_shown = False
+            proposal.status = ProposalStatus.AWAITING_CONFIRMATION
+            store.save_proposal(proposal)
+            log_event(
+                "campaign_template_paused",
+                user_id=proposal.user_id,
+                session_id=proposal.session_id,
+                proposal_id=proposal.id,
+                payload={
+                    "campaign_id": campaign_id,
+                    "retracted": True,
+                    "note": "Live add-on pulled because the template was paused",
+                },
+            )
+            retracted += 1
+    return retracted
+
+
+def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) -> dict:
+    """Enable or pause a growth template. Runtime uses this instead of per-cart clicks."""
+    status = (body.status or "").strip().lower()
+    if status not in {"enabled", "paused"}:
+        raise HTTPException(status_code=400, detail="status must be 'enabled' or 'paused'")
+
+    campaigns = {
+        str(c.get("id")): c
+        for c in load_campaigns().get("campaigns", [])
+        if c.get("id")
+    }
+    if campaign_id not in campaigns:
+        raise HTTPException(status_code=404, detail="Unknown campaign template")
+
+    policy = store.set_campaign_policy(campaign_id, status, note=body.note)
+    log_event(
+        "campaign_template_policy_updated",
+        payload={
+            "campaign_id": campaign_id,
+            "status": status,
+            "note": body.note,
+        },
+    )
+
+    released = 0
+    retracted = 0
+    if status == "enabled":
+        for proposal in list_pending_merchant_approvals(limit=100):
+            camp = proposal.campaign_decision
+            if camp and camp.campaign_id == campaign_id:
+                decide_merchant_campaign(
+                    proposal.id,
+                    MerchantApprovalRequest(decision="approve", note="template enabled"),
+                )
+                released += 1
+    else:
+        retracted = _retract_open_offers_for_template(campaign_id)
+
+    return {
+        "policy": policy,
+        "campaign": campaigns[campaign_id],
+        "pending_released": released,
+        "offers_retracted": retracted,
+        "note": (
+            "Future matching checkouts auto-release this add-on"
+            if status == "enabled"
+            else "This add-on is off. Open checkouts using it were pulled back to the baseline cart."
+        ),
+    }
+
+
+def merchant_campaign_catalog() -> dict:
+    cfg = load_campaigns()
+    stored = store.list_campaign_policies()
+    campaigns = []
+    seen_ids: set[str] = set()
+    for campaign in cfg.get("campaigns", []):
+        campaign_id = str(campaign.get("id") or "")
+        if not campaign_id or campaign_id in seen_ids:
+            continue
+        seen_ids.add(campaign_id)
+        live = stored.get(campaign_id)
+        json_enabled = bool(campaign.get("enabled", True))
+        live_status = live["status"] if live else ("enabled" if json_enabled else "paused")
+        campaigns.append(
+            {
+                **campaign,
+                "live_status": live_status,
+                "enabled": live_status == "enabled",
+                "policy_updated_at": live["updated_at"] if live else None,
+                "policy_note": live["note"] if live else None,
+            }
+        )
+    return {
+        **cfg,
+        "campaigns": campaigns,
+        "approval_model": "template_policy",
+        "campaign_guardrails": {
+            **cfg.get("campaign_guardrails", {}),
+            "require_merchant_approval": False,
+            "require_template_enabled": True,
+        },
+    }
 
 
 def _user_request_summary(req: CreateProposalRequest) -> str | None:

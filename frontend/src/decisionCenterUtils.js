@@ -142,18 +142,23 @@ export function buildDecisionCenterView({
   let merchantApproval = null;
   if (camp) {
     if (camp.merchant_approval_status === "approved") {
-      merchantApproval = "Explicitly approved";
+      merchantApproval =
+        camp.approval_mode === "template_policy"
+          ? "Template enabled — auto-applied"
+          : "Explicitly approved";
+    } else if (camp.merchant_approval_status === "paused") {
+      merchantApproval = "Template paused — enable it on /merchant";
     } else if (camp.merchant_approval_status === "rejected") {
       merchantApproval = "Explicitly rejected";
     } else {
-      merchantApproval = "Pending — open /merchant to release or hold";
+      merchantApproval = "Pending — enable the template on /merchant";
     }
   }
 
-  // Until the merchant releases the offer, do not surface SKU / copy to the
-  // customer-facing checkout. Merchant desk and judge Mode still see the full
-  // package after approval (or on /merchant / /demo).
-  const offerHeld = proposal?.status === "awaiting_merchant_approval";
+  const offerHeld =
+    proposal?.status === "awaiting_merchant_approval" ||
+    camp?.merchant_approval_status === "paused" ||
+    camp?.merchant_approval_status === "pending";
 
   return {
     userRequest:

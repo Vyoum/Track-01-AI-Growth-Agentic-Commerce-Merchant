@@ -21,6 +21,8 @@ TRACKED_EVENT_TYPES = (
     "campaign_proposed",
     "campaign_merchant_approved",
     "campaign_merchant_rejected",
+    "campaign_template_applied",
+    "campaign_template_paused",
     "growth_offer_shown",
     "growth_offer_none",
     "addon_accepted",
@@ -152,11 +154,15 @@ def compute_growth_metrics(limit: int = MAX_EVENTS) -> dict[str, Any]:
         "proposals_created": counts["proposal_created"],
         "proposals_blocked_by_guardrail": counts["proposal_rejected"],
         "campaigns_proposed": counts["campaign_proposed"],
-        "merchant_approved": counts["campaign_merchant_approved"],
+        "merchant_approved": counts["campaign_merchant_approved"]
+        + counts["campaign_template_applied"],
         "merchant_rejected": counts["campaign_merchant_rejected"],
         "offers_shown": offers_shown,
-        # An offer only reaches the customer after the merchant gate clears.
-        "offers_reaching_customer": direct_offers + counts["campaign_merchant_approved"],
+        # An offer only reaches the customer after an enabled template applies,
+        # a leftover per-checkout approve, or a direct add-on with no campaign.
+        "offers_reaching_customer": direct_offers
+        + counts["campaign_merchant_approved"]
+        + counts["campaign_template_applied"],
         "offers_with_no_eligible_addon": counts["growth_offer_none"],
         "offers_accepted": accepted,
         "offers_declined": declined,

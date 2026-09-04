@@ -6,6 +6,7 @@ import {
   fetchHealth,
   fetchMeta,
   fetchPendingCampaigns,
+  setCampaignPolicy,
 } from "./api.js";
 
 function formatRupee(n) {
@@ -96,19 +97,21 @@ function PendingCard({ proposal, busyId, onDecide }) {
   );
 }
 
-function CatalogCard({ campaign, copyTemplates }) {
+function CatalogCard({ campaign, copyTemplates, busyId, onPolicy }) {
   const template = copyTemplates?.[campaign.copy_key];
+  const live = campaign.live_status || (campaign.enabled ? "enabled" : "paused");
+  const busy = busyId === campaign.id;
   return (
     <article className="merchant-card catalog">
       <header className="merchant-card-head">
         <div>
-          <p className="merchant-eyebrow">Template</p>
+          <p className="merchant-eyebrow">Growth template</p>
           <h3>{campaign.name}</h3>
         </div>
         <span
-          className={`merchant-badge ${campaign.enabled ? "enabled" : "disabled"}`}
+          className={`merchant-badge ${live === "enabled" ? "enabled" : "disabled"}`}
         >
-          {campaign.enabled ? "Enabled" : "Disabled"}
+          {live === "enabled" ? "Enabled" : "Paused"}
         </span>
       </header>
       <dl className="summary-grid">
@@ -130,6 +133,30 @@ function CatalogCard({ campaign, copyTemplates }) {
         <dd>{(campaign.copy_variants || []).join(", ") || "—"}</dd>
       </dl>
       {template && <p className="merchant-copy">{template}</p>}
+      <p className="muted">
+        Enable once. Matching checkouts then auto-release this add-on. Pause to
+        stop new offers — no per-order click.
+      </p>
+      <div className="actions">
+        {live !== "enabled" ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onPolicy(campaign.id, "enabled")}
+          >
+            Enable template
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy}
+            onClick={() => onPolicy(campaign.id, "paused")}
+          >
+            Pause template
+          </button>
+        )}
+      </div>
     </article>
   );
 }
@@ -171,15 +198,22 @@ export default function MerchantPage() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  async function onDecide(proposalId, decision) {
-    setBusyId(proposalId);
+  async function onPolicy(campaignId, status) {
+    setBusyId(campaignId);
     setMessage("");
     try {
-      const updated = await decideCampaign(proposalId, decision);
+      const result = await setCampaignPolicy(campaignId, status);
+      let extra = "";
+      if (status === "enabled" && result.pending_released) {
+        extra = ` Released ${result.pending_released} leftover checkout(s).`;
+      }
+      if (status === "paused" && result.offers_retracted) {
+        extra = ` Pulled ${result.offers_retracted} open add-on(s) back to the baseline cart.`;
+      }
       setMessage(
-        decision === "approve"
-          ? `Approved ${updated.campaign_decision?.campaign_id || proposalId}. Customer can accept/skip on checkout.`
-          : `Rejected ${updated.campaign_decision?.campaign_id || proposalId}. Baseline cart only.`
+        (status === "enabled"
+          ? `Enabled ${campaignId}. Matching checkouts will auto-release this add-on.`
+          : `Paused ${campaignId}. This add-on will not be shown. Place a new order (or refresh checkout) to see the stall.`) + extra
       );
       await refresh();
     } catch (err) {
@@ -189,7 +223,31 @@ export default function MerchantPage() {
     }
   }
 
-  const campaigns = catalog?.campaigns || [];
+  async function onDecide(proposalId, decision) {
+    setBusyId(proposalId);
+    setMessage("");
+    try {
+      const updated = await decideCampaign(proposalId, decision);
+      setMessage(
+        decision === "approve"
+          ? `Approved leftover checkout ${updated.campaign_decision?.campaign_id || proposalId} and enabled the template.`
+          : `Rejected leftover checkout. Baseline cart only.`
+      );
+      await refresh();
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const campaigns = [];
+  const seen = new Set();
+  for (const campaign of catalog?.campaigns || []) {
+    if (!campaign?.id || seen.has(campaign.id)) continue;
+    seen.add(campaign.id);
+    campaigns.push(campaign);
+  }
   const guardrails = catalog?.campaign_guardrails || {};
   const segments = catalog?.known_segments || [];
 
@@ -198,10 +256,10 @@ export default function MerchantPage() {
       <header className="app-header">
         <div>
           <p className="eyebrow">Merchant · Campaign Orchestrator</p>
-          <h1>Campaign Desk</h1>
+          <h1>Growth templates</h1>
           <p className="sub">
-            Approve growth campaigns before they reach the customer. Catalog is
-            read from <code>campaigns.json</code> — no invented SKUs or discounts.
+            Enable a template once. Matching add-ons then auto-release to the
+            customer. Pause to stop new offers. No per-checkout click.
           </p>
         </div>
         <div className="merchant-header-actions">
@@ -223,17 +281,12 @@ export default function MerchantPage() {
       {message && <p className="msg merchant-toast">{message}</p>}
       {error && <p className="msg merchant-toast error">{error}</p>}
 
-      <section className="merchant-section">
-        <div className="merchant-section-head">
-          <h2>Pending approvals</h2>
-          <span className="merchant-count">{pending.length}</span>
-        </div>
-        {pending.length === 0 ? (
-          <p className="muted">
-            No campaigns waiting. Run the checkout demo and a proposal will appear
-            here when status is <code>awaiting_merchant_approval</code>.
-          </p>
-        ) : (
+      {pending.length > 0 && (
+        <section className="merchant-section">
+          <div className="merchant-section-head">
+            <h2>Leftover per-checkout reviews</h2>
+            <span className="merchant-count">{pending.length}</span>
+          </div>
           <div className="merchant-grid">
             {pending.map((p) => (
               <PendingCard
@@ -244,17 +297,19 @@ export default function MerchantPage() {
               />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <section className="merchant-section">
         <div className="merchant-section-head">
-          <h2>Campaign catalog</h2>
+          <h2>Growth templates</h2>
           <span className="merchant-count">{campaigns.length}</span>
         </div>
         <dl className="summary-grid merchant-policy">
-          <dt>Require approval</dt>
-          <dd>{String(guardrails.require_merchant_approval ?? true)}</dd>
+          <dt>Approval model</dt>
+          <dd>Enable template once, then auto-apply</dd>
+          <dt>Per-checkout click</dt>
+          <dd>{String(guardrails.require_merchant_approval ?? false)}</dd>
           <dt>Max discount</dt>
           <dd>{guardrails.max_discount_pct ?? 0}%</dd>
           <dt>Denied categories</dt>
@@ -268,6 +323,8 @@ export default function MerchantPage() {
               key={c.id}
               campaign={c}
               copyTemplates={catalog?.copy_templates}
+              busyId={busyId}
+              onPolicy={onPolicy}
             />
           ))}
         </div>

@@ -52,6 +52,14 @@ CREATE TABLE IF NOT EXISTS payments (
 -- Last-line defense: a proposal can own at most one payment record.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_proposal_id
 ON payments(proposal_id);
+
+-- Merchant enables a growth template once; runtime applies it within limits.
+CREATE TABLE IF NOT EXISTS campaign_policies (
+    campaign_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    note TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 

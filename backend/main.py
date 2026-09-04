@@ -102,6 +102,7 @@ def meta() -> dict:
             "growth": True,
             "campaigns": True,
             "merchant_approval": True,
+            "template_policy": True,
             "checkout_core": True,
             "razorpay": True,
             "razorpay_test_ready": razorpay_ready,

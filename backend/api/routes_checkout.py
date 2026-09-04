@@ -10,12 +10,12 @@ from backend.models import (
     CreateProposalRequest,
     FailPaymentRequest,
     MerchantApprovalRequest,
+    CampaignPolicyRequest,
     SearchProductsResponse,
     VerifyPaymentRequest,
 )
 from backend.audit.logger import list_events
 from backend.services import catalog, checkout, history
-from backend.services.data_loader import load_campaigns
 
 router = APIRouter(prefix="/api", tags=["checkout"])
 
@@ -76,7 +76,12 @@ def api_pending_campaigns(limit: int = Query(default=20, ge=1, le=100)):
 
 @router.get("/merchant/campaigns/catalog")
 def api_campaign_catalog():
-    return load_campaigns()
+    return checkout.merchant_campaign_catalog()
+
+
+@router.post("/merchant/campaigns/{campaign_id}/policy")
+def api_campaign_policy(campaign_id: str, body: CampaignPolicyRequest):
+    return checkout.set_campaign_template_policy(campaign_id, body)
 
 
 @router.post("/proposals/{proposal_id}/campaign/decide")

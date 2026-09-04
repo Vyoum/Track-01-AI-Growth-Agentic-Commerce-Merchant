@@ -65,30 +65,33 @@ def _match_campaign(
 ) -> tuple[dict[str, Any] | None, OpportunitySignal | None]:
     """Pick highest-priority (lowest number) enabled campaign matching opportunity + strategy."""
     cfg = load_campaigns()
-    campaigns = [c for c in cfg.get("campaigns", []) if c.get("enabled", True)]
+    campaigns = list(cfg.get("campaigns", []))
     method = growth.growth_method or ""
 
     opportunity_ids = {o.id for o in opportunities}
     ranked: list[tuple[int, dict[str, Any], OpportunitySignal]] = []
 
     for camp in campaigns:
-        opp_id = camp.get("opportunity")
+        camp_ids = {
+            str(o)
+            for o in (camp.get("opportunities") or [])
+            if o
+        }
+        if camp.get("opportunity"):
+            camp_ids.add(str(camp["opportunity"]))
+        matched = camp_ids & opportunity_ids
+        if not matched:
+            continue
         strategy = camp.get("strategy")
-        if opp_id not in opportunity_ids:
-            continue
         if strategy and method and strategy != method:
-            # Allow popular_budget_fit campaigns when method is popular_budget_fit
-            # and complement campaigns when method is catalog_complements
             continue
-        # Prefer segment match; allow if campaign target_segment equals resolved segment
         target = camp.get("target_segment")
         if target and target != segment:
-            # Soft miss: still allow but deprioritize
             priority = int(camp.get("priority", 99)) + 50
         else:
             priority = int(camp.get("priority", 99))
 
-        signal = next(o for o in opportunities if o.id == opp_id)
+        signal = next(o for o in opportunities if o.id in matched)
         ranked.append((priority, camp, signal))
 
     if not ranked:
@@ -151,21 +154,8 @@ def orchestrate_campaign(
     )
 
     if camp is None or signal is None:
-        # Fallback: bind to first opportunity + synthetic campaign id from strategy
-        if not opportunities:
-            skipped.append("no opportunity signals for offer")
-            return CampaignOrchestrationResult(growth, None, opportunities, skipped)
-        signal = opportunities[0]
-        camp = {
-            "id": f"adhoc_{growth.growth_method or 'growth'}",
-            "name": "Ad-hoc growth campaign",
-            "target_segment": segment,
-            "copy_key": "complement_addon",
-            "copy_variants": ["complement_addon"],
-            "max_discount_pct": 0,
-            "allowed_categories": [],
-        }
-        skipped.append("no campaigns.json match — using ad-hoc wrapper (still needs merchant approval)")
+        skipped.append("no matching growth template")
+        return CampaignOrchestrationResult(growth, None, opportunities, skipped)
 
     offer = growth.offer
     product = get_product(offer.product_id)
@@ -178,6 +168,15 @@ def orchestrate_campaign(
     if not guard.ok:
         skipped.extend(guard.notes)
         return CampaignOrchestrationResult(growth, None, opportunities, skipped)
+
+    from backend.services import store
+
+    camp_id = str(camp.get("id") or "")
+    template_enabled = store.is_campaign_template_enabled(camp_id) if camp_id else False
+    if not template_enabled:
+        skipped.append(
+            f"best matching template {camp_id} is paused — add-on held for merchant"
+        )
 
     copy_key = str(camp.get("copy_key") or "complement_addon")
     copy_variants = list(camp.get("copy_variants") or [copy_key])
@@ -219,7 +218,8 @@ def orchestrate_campaign(
         copy_variants=copy_variants,
         customer_copy=customer_copy,
         discount_pct=0.0,
-        merchant_approval_status="pending",
+        merchant_approval_status="approved" if template_enabled else "paused",
+        approval_mode="template_policy",
         guardrail_passed=True,
         guardrail_notes=guard.notes,
     )

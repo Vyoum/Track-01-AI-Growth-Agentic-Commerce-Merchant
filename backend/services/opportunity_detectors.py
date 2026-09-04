@@ -40,25 +40,6 @@ def detect_opportunities(
 ) -> list[OpportunitySignal]:
     """Return ranked opportunity signals. Does not invent offers."""
     signals: list[OpportunitySignal] = []
-    baseline = cart.total_inr
-    remaining = (
-        stated_budget_inr - baseline if stated_budget_inr is not None else None
-    )
-
-    if remaining is not None and remaining > 0:
-        signals.append(
-            OpportunitySignal(
-                id="budget_headroom",
-                label="Budget headroom",
-                priority=10,
-                data={
-                    "baseline_inr": baseline,
-                    "stated_budget_inr": stated_budget_inr,
-                    "remaining_inr": remaining,
-                },
-                rationale=f"₹{remaining} remaining under stated budget ₹{stated_budget_inr}",
-            )
-        )
 
     if growth.has_relationship_data and growth.growth_method == "catalog_complements":
         signals.append(
