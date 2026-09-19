@@ -194,32 +194,19 @@ export default function GuardrailLab() {
     {
       id: "budget",
       title: "Negative budget",
-      description:
-        "Sends stated_budget_inr=-1. Pydantic must reject it at the API boundary.",
-      damage:
-        "An unbounded budget makes every guardrail downstream meaningless — the agent could assemble a cart of any value and call it 'within budget'.",
-      defence: "Typed bounds (1 ≤ budget ≤ 5000) rejected before a cart exists.",
+      description: "Sends stated_budget_inr=-1.",
       run: runInvalidBudget,
     },
     {
       id: "addon",
       title: "Invented add-on SKU",
       description: "Attempts to accept a product ID that was never offered.",
-      damage:
-        "The customer is charged for an item the merchant never offered and the agent invented. This is the classic hallucinated-SKU failure.",
-      defence:
-        "The accepted product_id must match the stored offer on the server; the offer is never taken from the request.",
       run: runWrongAddon,
     },
     {
       id: "concurrency",
       title: "Concurrent double-confirm",
-      description:
-        "Fires two confirmations together. Atomic CAS permits only one payment creator.",
-      damage:
-        "Two Razorpay orders for one cart — the customer is charged twice for the same order and someone has to refund it by hand.",
-      defence:
-        "BEGIN IMMEDIATE + a status compare-and-swap lets exactly one request claim the proposal, backed by a unique index on payments.proposal_id.",
+      description: "Fires two confirmations together with different idempotency keys.",
       run: runDoubleConfirm,
     },
   ];
@@ -249,13 +236,6 @@ export default function GuardrailLab() {
             <h2>{scenario.title}</h2>
             <p className="muted">{scenario.description}</p>
 
-            <div className="counterfactual">
-              <p className="counterfactual-head">Without this guardrail</p>
-              <p className="counterfactual-damage">{scenario.damage}</p>
-              <p className="counterfactual-head defence">What actually stops it</p>
-              <p className="counterfactual-defence">{scenario.defence}</p>
-            </div>
-
             <div className="actions">
               <button
                 type="button"
@@ -281,10 +261,6 @@ export default function GuardrailLab() {
         ))}
       </div>
 
-      <p className="muted guardrail-footnote">
-        Database invariant: <code>CREATE UNIQUE INDEX ux_payments_proposal_id
-        ON payments(proposal_id)</code>.
-      </p>
     </div>
   );
 }
