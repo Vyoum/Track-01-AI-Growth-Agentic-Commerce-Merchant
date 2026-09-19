@@ -44,7 +44,7 @@ The project combines five connected capabilities:
 1. **Conversational checkout** — Groq tool calling translates requests such as “Order my usual, under ₹800” into catalog, history, and proposal operations.
 2. **Revenue growth** — a deterministic ranker selects one eligible complement or budget-fitting popular product and measures projected versus realized uplift.
 3. **Merchant campaign control** — merchants enable or pause pre-approved growth templates; checkout never invents a campaign or discount.
-4. **Safe payment execution** — server-owned pricing, exact-total confirmation, atomic proposal claiming, idempotency, and Razorpay test-mode enforcement protect every money action.
+4. **Safe payment execution** — server-owned pricing, exact-total confirmation, atomic proposal claiming, idempotency, Razorpay test-mode enforcement, and a persistent spend mandate that pauses impulsive repeat checkouts with an explicit warning (the customer can continue anyway).
 5. **Agent-to-agent commerce** — an independent buyer agent discovers a machine-readable merchant manifest, searches the catalog, evaluates an offer, confirms the stored total, and completes a mock/test checkout using only public APIs.
 
 ### Capability matrix
@@ -59,6 +59,7 @@ The project combines five connected capabilities:
 | Select campaign and copy | `campaigns.json` templates | Merchant policy |
 | Accept or skip add-on | Explicit customer/agent action | Buyer |
 | Confirm payment | Exact proposal, total, and owner gate | Buyer + server |
+| Impulse-shopping pause | Persistent session / day / month spend mandate | Server (bypass after warning) |
 | Create Razorpay order | Razorpay wrapper, test mode only | Payment service |
 | Mark payment paid | Signature verification | Server + Razorpay response |
 | Compute growth and safety metrics | Fold over append-only audit events | Audit trail |
@@ -159,6 +160,7 @@ flowchart TB
         CheckoutAPI["/api/proposals and payments"]
         DemoAPI["/api/demo and metrics"]
         Manifest["/.well-known/agent-catalog.json"]
+        Acp["/.well-known/acp.json + /checkout_sessions"]
     end
 
     subgraph AgentPlane[Language and orchestration plane]
@@ -190,9 +192,10 @@ flowchart TB
     MerchantUI --> CheckoutAPI
     GuardrailUI --> CheckoutAPI
     A2AUI --> Manifest
-    A2AUI --> CheckoutAPI
+    A2AUI --> Acp
     Buyer --> Manifest
-    Buyer --> CheckoutAPI
+    Buyer --> Acp
+    Acp --> Checkout
 
     AgentAPI --> PhraseGates
     PhraseGates --> Checkout
@@ -309,32 +312,30 @@ There are always two separate customer decisions when an add-on is offered:
 
 ## Buyer-agent flow
 
-The independent buyer agent lives in `buyer_agent/` and imports no merchant backend code. It interacts through the same public contract available to any external buyer.
+The independent buyer agent lives in `buyer_agent/` and imports no merchant backend code. It discovers `GET /.well-known/acp.json`, then drives ACP-shaped checkout sessions. Those sessions are an adapter over the same proposal/payment core humans use — not ChatGPT Instant Checkout or Stripe Shared Payment Tokens.
 
 ```mermaid
 sequenceDiagram
     participant Buyer as External buyer agent
-    participant Manifest as Well-known manifest
+    participant Acp as ACP discovery
     participant Catalog as Product API
-    participant Checkout as Proposal API
-    participant Guardrails as Server guardrails
-    participant Payment as Payment API
+    participant Sessions as Checkout sessions
+    participant Core as Proposal and payment core
     participant Audit as Audit trail
 
-    Buyer->>Manifest: GET /.well-known/agent-catalog.json
-    Manifest-->>Buyer: Endpoints, currency, policies, limits
+    Buyer->>Acp: GET /.well-known/acp.json
+    Acp-->>Buyer: API-Version 2026-04-17, not Instant Checkout partner
     Buyer->>Catalog: GET /api/products?q=goal
     Catalog-->>Buyer: Current merchant products
     Buyer->>Buyer: Rank in-stock products within budget
-    Buyer->>Checkout: POST /api/proposals buyer_type=external_agent
-    Checkout->>Guardrails: Price, stock, category, budget checks
-    Checkout-->>Buyer: Stored proposal + optional offer
-    Buyer->>Buyer: Apply buyer-owned add-on policy
-    Buyer->>Checkout: Accept or skip offer
-    Buyer->>Checkout: Confirm exact stored total
-    Checkout->>Payment: Create mock/test order
-    Buyer->>Payment: Verify mock payment or await real checkout
-    Payment->>Audit: a2a_purchase_completed
+    Buyer->>Sessions: POST /checkout_sessions line_items
+    Sessions->>Core: create_proposal buyer_type=external_agent
+    Core-->>Sessions: Stored proposal
+    Sessions-->>Buyer: needs_input or ready_for_complete
+    Buyer->>Sessions: POST update buyer_actions campaign/addon
+    Buyer->>Sessions: POST complete payment_data.instrument spt_demo
+    Sessions->>Core: confirm + mock verify or Razorpay Checkout.js
+    Core->>Audit: a2a_purchase_completed
 ```
 
 The buyer’s policy currently:
@@ -347,6 +348,7 @@ The buyer’s policy currently:
 Run it against a running backend:
 
 ```bash
+AUTO_MERCHANT_APPROVE=1 \
 MERCHANT_BASE_URL=http://127.0.0.1:8000 \
 BUYER_WANT=protein \
 BUYER_BUDGET_INR=800 \
@@ -465,6 +467,9 @@ The default policy is stored in `backend/data/guardrail_policy.json`.
 | Payment owner | Must match when supplied | Confirmation gate |
 | Payments per proposal | At most 1 | Atomic state transition + unique DB index |
 | Realized uplift | Only after verified payment | Payment verification service |
+| Persistent spend mandate | Session ₹2,000 / day ₹3,000 / month ₹7,000 | Confirm gate; increment only after verified pay |
+
+The per-order stated budget still caps **one cart**. The spend mandate is a **wallet across time**: after signature-verified payments accumulate past a period cap, confirm returns `409 MANDATE_CAP_WARNING` instead of creating a Razorpay order. This is a pause to reduce impulsive shopping, not a hard block. The customer (or buyer agent) can continue by sending `acknowledge_impulse_warning: true`, or by confirming payment a second time after the warning. Confirm takes a **CAS reservation** (`reserved_inr` + one hold per proposal) under `BEGIN IMMEDIATE` so two tabs cannot both spend the same remaining room. Dismissed or failed captures release the hold and do not increment `spent_so_far`. Batch replay (`force_mock` / `replay_` sessions) skips the mandate so `/growth` is not blocked.
 
 ### Concurrency protection
 
@@ -510,8 +515,9 @@ Money-related decisions are written to SQLite and, when possible, an ignored loc
 | Campaign | `campaign_proposed`, `campaign_template_applied`, `campaign_template_paused` |
 | Growth | `growth_offer_shown`, `growth_offer_none`, `addon_accepted`, `addon_skipped` |
 | Payment | `payment_confirmation_received`, `payment_order_created`, `payment_verified_paid` |
+| Spend mandate | `mandate_impulse_warning`, `mandate_cap_bypassed`, `mandate_spend_recorded` |
 | Failure | `payment_signature_invalid`, `payment_failed`, `razorpay_order_create_failed` |
-| A2A | `a2a_purchase_completed` |
+| A2A | `a2a_purchase_completed`, `acp_checkout_session_created`, `acp_checkout_completed` |
 | Batch evaluation | `demo_replay_session` |
 
 ### Decision trace
@@ -719,7 +725,13 @@ See [`docs/merchant_api_contract.md`](docs/merchant_api_contract.md) for the acc
 |---|---|---|
 | `GET` | `/health` | Runtime, catalog source, model and Razorpay readiness |
 | `GET` | `/api/meta` | Merchant and feature metadata |
-| `GET` | `/.well-known/agent-catalog.json` | Machine-readable buyer-agent contract |
+| `GET` | `/.well-known/agent-catalog.json` | Machine-readable buyer-agent contract (`proposal-confirm-v1`) |
+| `GET` | `/.well-known/acp.json` | ACP adapter discovery (not Instant Checkout partnership) |
+| `POST` | `/checkout_sessions` | Create ACP-shaped session (201) |
+| `GET` | `/checkout_sessions/{id}` | Retrieve session |
+| `POST` | `/checkout_sessions/{id}` | Update (addon / campaign via `buyer_actions`) |
+| `POST` | `/checkout_sessions/{id}/complete` | Confirm + mock/test settle with `spt_demo` token |
+| `POST` | `/checkout_sessions/{id}/cancel` | Cancel session / proposal |
 
 ### Catalog and history
 
@@ -767,7 +779,7 @@ state are still resolved by deterministic server code.
 | `GET` | `/api/proposals/{id}` | Fetch current proposal state |
 | `POST` | `/api/proposals/{id}/growth/decide` | Accept or skip the stored add-on |
 | `POST` | `/api/proposals/{id}/addon` | A2A-compatible alias for add-on decision |
-| `POST` | `/api/proposals/{id}/confirm` | Confirm exact total and create payment order |
+| `POST` | `/api/proposals/{id}/confirm` | Confirm exact total and create payment order. If a spend cap would be exceeded, returns `409` with `MANDATE_CAP_WARNING` (`bypass_allowed: true`). Resend with `acknowledge_impulse_warning: true` to continue. |
 | `POST` | `/api/proposals/{id}/cancel` | Cancel an unpaid proposal |
 | `POST` | `/api/proposals/{id}/payment/fail` | Surface checkout failure/dismissal |
 | `POST` | `/api/payments/verify` | Verify Razorpay or mock payment signature |
@@ -790,7 +802,8 @@ Confirmation example:
 {
   "expected_total_inr": 798,
   "user_id": "demo_user_01",
-  "idempotency_key": "client-generated-stable-key"
+  "idempotency_key": "client-generated-stable-key",
+  "acknowledge_impulse_warning": false
 }
 ```
 
@@ -815,6 +828,7 @@ The example total must be replaced with the current stored proposal total in liv
 | `GET` | `/api/demo/scenarios` | Replay scenario definitions |
 | `POST` | `/api/demo/replay` | Execute 1–50 synthetic sessions |
 | `GET` | `/api/a2a/summary` | Completed external-agent purchases |
+| `GET` | `/api/spend-mandate` | Current session / day / month remaining caps |
 
 ---
 
@@ -829,8 +843,9 @@ The example total must be replaced with the current stored proposal total in liv
 5. Open the **AI Commerce Trace** and show the same language-agent provenance plus candidate reasons and gate checks.
 6. Open `/guardrails` and run the invented-SKU and concurrent-confirm attacks.
 7. Open `/growth`, run a 25-session batch, and distinguish synthetic acceptance from real pipeline enforcement.
-8. Open `/a2a`, show the well-known manifest, and run the independent buyer agent.
+8. Open `/a2a`, show `/.well-known/acp.json`, and run the independent buyer over `/checkout_sessions`.
 9. If Razorpay test keys are configured, finish one human checkout in the Razorpay modal and show the verified payment event.
+10. Pay until the session cap would be exceeded, show the impulse-shopping warning, then **Continue anyway** — the pause is the product, not a hard block.
 
 ### Frozen hero flow using HTTP
 
@@ -901,6 +916,7 @@ Coverage includes:
 - Template enable/pause behaviour.
 - Batch replay determinism and bounds.
 - Attack scenarios and audit-derived safety metrics.
+- Spend-mandate impulse warning, explicit bypass, and no increment on dismiss.
 
 ### Frontend production build
 
@@ -999,6 +1015,7 @@ A failed, expired, cancelled, or paid proposal is terminal. The system does not 
 │   │   ├── campaign_orchestrator.py
 │   │   ├── demo_metrics.py       # Audit-derived KPIs
 │   │   ├── demo_replay.py        # Synthetic scenario runner
+│   │   ├── spend_mandate.py      # Persistent session/day/month spend ledger
 │   │   └── store.py              # SQLite persistence + atomic claim
 │   ├── config.py
 │   ├── db.py
@@ -1031,7 +1048,7 @@ This is a Buildathon demonstration, not a production payment platform.
 - Razorpay is restricted to test mode; mock verification is available for local demonstrations.
 - The HTTP API has no customer authentication, merchant authorization, rate limiting, or multi-tenant isolation. Do not expose it publicly as a production service without adding those controls.
 - SQLite is appropriate for a single-process demo, not horizontally scaled payment workloads.
-- The public manifest uses the project’s `proposal-confirm-v1` contract; it does not claim conformance with ACP, AP2, UAP, or x402.
+- The public manifest still documents `proposal-confirm-v1`. A2A checkout uses an **ACP-shaped adapter** (`API-Version: 2026-04-17`, `/checkout_sessions`). That is not ChatGPT Instant Checkout, not an OpenAI partnership, and not Stripe Shared Payment Tokens. Demo complete uses `spt_demo_*` tokens that settle through the existing confirm+verify path.
 - The independent buyer is an autonomous deterministic policy agent. Groq is used in the human conversational channel, not in the buyer’s product scorer.
 - Growth recommendations use merchant relationships, history, and popularity heuristics rather than a trained recommender model.
 - Synthetic replay measures pipeline behaviour and simulated outcomes, not real merchant conversion lift.
@@ -1061,3 +1078,7 @@ flowchart LR
 **No explicit confirmation → no Razorpay order.**
 
 **No verified payment → no realized uplift.**
+
+**No explicit impulse warning (or second confirm) → no Razorpay order after a spend-cap pause.** The customer can still continue; the pause exists to reduce impulsive shopping.
+
+With usable `rzp_test_` keys, confirm creates a real Razorpay test order and Checkout.js opens. Completing the modal signature-verifies capture; dismissing it records `payment_failed`, keeps realized uplift at 0, and makes that proposal terminal. Mock orders (`order_mock_…`) are labelled and never presented as dashboard transactions. Batch replay still force-mocks so `/growth` does not hit Razorpay. The spend mandate ledger increments only on `payment_verified_paid`.

@@ -58,7 +58,7 @@ export function createUsualProposal(budget = 800) {
     use_usual: true,
     stated_budget_inr: budget,
     with_growth: true,
-    session_id: `ui_${Date.now()}`,
+    session_id: "ui_demo_user_01",
   });
 }
 
@@ -95,6 +95,10 @@ export function fetchAgentManifest() {
   return getJson("/.well-known/agent-catalog.json");
 }
 
+export function fetchAcpManifest() {
+  return getJson("/.well-known/acp.json");
+}
+
 export function fetchA2aSummary() {
   return getJson("/api/a2a/summary");
 }
@@ -120,24 +124,37 @@ export function searchProducts(q = "") {
   return getJson(`/api/products${qs}`);
 }
 
+export function fetchSpendMandate(userId, sessionId) {
+  const params = new URLSearchParams({ user_id: userId });
+  if (sessionId) params.set("session_id", sessionId);
+  return getJson(`/api/spend-mandate?${params.toString()}`);
+}
+
 export function confirmProposalForUser(
   proposalId,
   expectedTotalInr,
   userId,
-  idempotencyKey
+  idempotencyKey,
+  acknowledgeImpulseWarning = false
 ) {
   return postJson(`/api/proposals/${proposalId}/confirm`, {
     expected_total_inr: expectedTotalInr,
     user_id: userId,
     idempotency_key: idempotencyKey,
+    acknowledge_impulse_warning: acknowledgeImpulseWarning,
   });
 }
 
-export function confirmProposal(proposalId, expectedTotalInr) {
+export function confirmProposal(
+  proposalId,
+  expectedTotalInr,
+  acknowledgeImpulseWarning = false
+) {
   return postJson(`/api/proposals/${proposalId}/confirm`, {
     expected_total_inr: expectedTotalInr,
     user_id: "demo_user_01",
     idempotency_key: `ui_${proposalId}_${expectedTotalInr}`,
+    acknowledge_impulse_warning: acknowledgeImpulseWarning,
   });
 }
 
@@ -164,17 +181,34 @@ export function loadRazorpayScript() {
 }
 
 export async function openRazorpayCheckout(result, onSuccess, onDismiss) {
+  const checkout = result?.checkout;
+  if (!checkout?.key_id || !checkout?.order_id) {
+    throw new Error(
+      "Razorpay Checkout.js needs a live test order (key_id + order_id). Mock orders never open the modal."
+    );
+  }
   const Razorpay = await loadRazorpayScript();
+  let settled = false;
   const options = {
-    key: result.checkout.key_id,
-    amount: result.checkout.amount_paise,
-    currency: result.checkout.currency,
-    name: result.checkout.name,
-    description: result.checkout.description,
-    order_id: result.checkout.order_id,
-    notes: result.checkout.notes,
-    handler: onSuccess,
-    modal: { ondismiss: onDismiss },
+    key: checkout.key_id,
+    amount: checkout.amount_paise,
+    currency: checkout.currency,
+    name: checkout.name,
+    description: checkout.description,
+    order_id: checkout.order_id,
+    notes: checkout.notes,
+    handler: async (response) => {
+      if (settled) return;
+      settled = true;
+      await onSuccess?.(response);
+    },
+    modal: {
+      ondismiss: async () => {
+        if (settled) return;
+        settled = true;
+        await onDismiss?.();
+      },
+    },
   };
   const rzp = new Razorpay(options);
   rzp.open();

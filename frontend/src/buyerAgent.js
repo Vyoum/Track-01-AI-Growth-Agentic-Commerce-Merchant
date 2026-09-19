@@ -1,16 +1,11 @@
 /**
- * Browser-side autonomous buyer agent — same public APIs as buyer_agent/run_purchase.py.
- * No backend imports; mirrors buyer_logic.py scoring rules.
+ * Browser A2A buyer — ACP checkout sessions (same as buyer_agent/run_purchase.py).
  */
 
-import {
-  confirmProposalForUser,
-  decideAddon,
-  decideCampaign,
-  fetchAgentManifest,
-  searchProducts,
-  verifyPayment,
-} from "./api.js";
+import { searchProducts } from "./api.js";
+
+const ACP_VERSION = "2026-04-17";
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 function scoreProduct(product, goal) {
   const want = String(goal.want || "")
@@ -57,31 +52,35 @@ export function shouldAcceptAddon(offer, goal, maxAddonInr = 150) {
   return price <= maxAddonInr && projected <= budget;
 }
 
-async function postProposal(body) {
-  const API_BASE = import.meta.env.VITE_API_BASE || "";
-  const res = await fetch(`${API_BASE}/api/proposals`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+function acpHeaders(idempotency) {
+  const headers = {
+    "Content-Type": "application/json",
+    "API-Version": ACP_VERSION,
+    Authorization: "Bearer demo-key",
+  };
+  if (idempotency) headers["Idempotency-Key"] = idempotency;
+  return headers;
+}
+
+async function acpJson(path, { method = "GET", body, idempotency } = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: acpHeaders(idempotency),
+    body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const detail = data.detail || data.message || res.statusText;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const err = new Error(
+      typeof detail === "string" ? detail : JSON.stringify(detail)
+    );
+    err.status = res.status;
+    err.detail = data.detail || data;
+    throw err;
   }
   return data;
 }
 
-/**
- * Run full A2A purchase from the browser.
- * @param {object} options
- * @param {string} options.want - catalog search term
- * @param {number} options.budgetInr
- * @param {string} options.userId
- * @param {number} options.maxAddonInr
- * @param {boolean} options.autoMerchantApprove
- * @param {(step: string) => void} [options.onStep]
- */
 export async function runBuyerPurchase({
   want = "protein",
   budgetInr = 800,
@@ -91,104 +90,123 @@ export async function runBuyerPurchase({
   onStep,
 }) {
   const goal = { want, budget_inr: budgetInr, user_id: userId };
-  const sessionId = `a2a_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const trace = [];
-
   const step = (msg) => {
     trace.push(msg);
     onStep?.(msg);
   };
 
-  const manifest = await fetchAgentManifest();
-  step(`discovered protocol=${manifest.checkout_protocol}`);
+  const acp = await fetch(`${API_BASE}/.well-known/acp.json`).then((r) => r.json());
+  step(
+    `discovered acp ${acp.api_version} partner=${acp.instant_checkout_partner}`
+  );
 
   const productsResp = await searchProducts(want);
   const products = productsResp.products || [];
-  if (!products.length) {
-    throw new Error(`No products for query=${want}`);
-  }
+  if (!products.length) throw new Error(`No products for query=${want}`);
 
   const chosen = pickProduct(products, goal);
-  if (!chosen) {
-    throw new Error("No in-stock product fits buyer goal/budget");
-  }
+  if (!chosen) throw new Error("No in-stock product fits buyer goal/budget");
   step(`selected ${chosen.id} (${chosen.name}) ₹${chosen.price_inr}`);
 
-  let proposal = await postProposal({
-    user_id: userId,
-    product_ids: [chosen.id],
-    stated_budget_inr: budgetInr,
-    with_growth: true,
-    session_id: sessionId,
-    buyer_type: "external_agent",
+  let session = await acpJson("/checkout_sessions", {
+    method: "POST",
+    idempotency: `acp-ui-${crypto.randomUUID().slice(0, 8)}`,
+    body: {
+      currency: "inr",
+      line_items: [{ id: chosen.id, quantity: 1 }],
+      stated_budget_inr: budgetInr,
+      buyer: { id: userId },
+      with_growth: true,
+    },
   });
-  const proposalId = proposal.id;
-  step(`proposal ${proposalId} status=${proposal.status}`);
+  const sid = session.id;
+  step(`session ${sid} status=${session.status}`);
 
-  if (proposal.status === "awaiting_merchant_approval") {
-    if (!autoMerchantApprove) {
-      throw new Error(
-        "Awaiting merchant approval — enable auto-approve or approve on /merchant"
+  async function resolveInputs() {
+    const codes = new Set((session.messages || []).map((m) => m.code));
+    const actions = {};
+    if (codes.has("merchant_approval_required")) {
+      if (!autoMerchantApprove) {
+        throw new Error("Awaiting merchant approval — enable auto-approve");
+      }
+      actions.campaign = "approve";
+    }
+    if (codes.has("addon_decision_required")) {
+      const addonMsg = (session.messages || []).find(
+        (m) => m.code === "addon_decision_required"
       );
+      const offer = addonMsg?.addon || {};
+      actions.addon = shouldAcceptAddon(offer, goal, maxAddonInr)
+        ? "accept"
+        : "skip";
     }
-    proposal = await decideCampaign(
-      proposalId,
-      "approve",
-      "A2A demo UI merchant desk simulation"
-    );
-    step(`merchant approved campaign → status=${proposal.status}`);
-  }
-
-  const offer = proposal.growth_offer;
-  if (proposal.status === "awaiting_addon_decision" && offer) {
-    if (shouldAcceptAddon(offer, goal, maxAddonInr)) {
-      proposal = await decideAddon(proposalId, "accept", offer.product_id);
-      step(`accepted add-on ${offer.name} → total ₹${proposal.total_inr}`);
-    } else {
-      proposal = await decideAddon(proposalId, "skip");
-      step(`skipped add-on → total ₹${proposal.total_inr}`);
+    if (Object.keys(actions).length) {
+      session = await acpJson(`/checkout_sessions/${sid}`, {
+        method: "POST",
+        body: { buyer_actions: actions },
+      });
+      step(`updated ${JSON.stringify(actions)} → ${session.status}`);
     }
   }
 
-  const expectedTotal = proposal.total_inr;
-  const idempotencyKey = `a2a-${proposalId}-${crypto.randomUUID().slice(0, 8)}`;
-  const checkout = await confirmProposalForUser(
-    proposalId,
-    expectedTotal,
-    userId,
-    idempotencyKey
-  );
-  step(`payment order ${checkout.payment?.razorpay_order_id || "created"}`);
+  if (session.status === "needs_input") {
+    await resolveInputs();
+    if (session.status === "needs_input") await resolveInputs();
+  }
 
-  const payment = checkout.payment;
-  let verified = null;
-  let status = "a2a_payment_pending";
-
-  if (payment?.mock) {
-    verified = await verifyPayment({
-      payment_id: payment.id,
-      razorpay_order_id: payment.razorpay_order_id,
-      razorpay_payment_id: `pay_a2a_${crypto.randomUUID().slice(0, 8)}`,
-      razorpay_signature: "mock_ok_a2a",
+  const completeBody = {
+    payment_data: {
+      instrument: { type: "spt_demo", token: "spt_demo_a2a" },
+    },
+  };
+  try {
+    session = await acpJson(`/checkout_sessions/${sid}/complete`, {
+      method: "POST",
+      idempotency: `acp-pay-${sid}`,
+      body: completeBody,
     });
-    status = "a2a_purchase_completed";
-    step(`mock payment verified ₹${verified.payment?.amount_inr}`);
-  } else {
-    step("real Razorpay mode — payment pending human/agent verify");
+  } catch (err) {
+    if (err.status === 409 && err.detail?.code === "MANDATE_CAP_WARNING") {
+      step("impulse warning — completing with ack");
+      completeBody.acknowledge_impulse_warning = true;
+      session = await acpJson(`/checkout_sessions/${sid}/complete`, {
+        method: "POST",
+        idempotency: `acp-pay-ack-${sid}`,
+        body: completeBody,
+      });
+    } else {
+      throw err;
+    }
   }
 
-  const growth =
-    verified?.growth_summary || checkout.growth_summary || {};
+  const total = session.totals?.total_inr;
+  step(`complete status=${session.status} total ₹${total}`);
+
+  const proposalId = session.proposal_id;
+  let proposal = null;
+  try {
+    proposal = await fetch(`${API_BASE}/api/proposals/${proposalId}`).then((r) =>
+      r.json()
+    );
+  } catch {
+    proposal = { id: proposalId, total_inr: total, status: session.status };
+  }
 
   return {
-    status,
+    status:
+      session.status === "completed"
+        ? "a2a_purchase_completed"
+        : session.status,
     proposal_id: proposalId,
-    proposal: verified?.proposal || proposal,
-    total_inr: expectedTotal,
-    uplift_inr: growth.realized_paid_uplift ?? growth.projected_uplift_inr ?? 0,
+    checkout_session_id: sid,
+    proposal,
+    total_inr: total,
+    uplift_inr: 0,
     buyer_type: "external_agent",
+    protocol: "acp_adapter",
     trace,
-    checkoutResult: verified || checkout,
-    session_id: sessionId,
+    checkoutResult: session,
+    session_id: sid,
   };
 }

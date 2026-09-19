@@ -15,7 +15,7 @@ from backend.models import (
     VerifyPaymentRequest,
 )
 from backend.audit.logger import list_events
-from backend.services import catalog, checkout, history
+from backend.services import catalog, checkout, history, spend_mandate
 
 router = APIRouter(prefix="/api", tags=["checkout"])
 
@@ -107,6 +107,14 @@ def api_fail_payment(proposal_id: str, body: FailPaymentRequest):
 @router.post("/payments/verify")
 def api_verify_payment(body: VerifyPaymentRequest):
     return checkout.verify_payment(body)
+
+
+@router.get("/spend-mandate")
+def api_spend_mandate(
+    user_id: str = Query(...),
+    session_id: str | None = None,
+):
+    return spend_mandate.snapshot(user_id, session_id)
 
 
 @router.get("/proposals/{proposal_id}/audit")

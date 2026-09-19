@@ -18,6 +18,7 @@ export default function OrderSummaryCard({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [localCheckout, setLocalCheckout] = useState(null);
+  const [impulseWarning, setImpulseWarning] = useState(null);
 
   const activeCheckout = checkoutResult || localCheckout;
 
@@ -64,12 +65,27 @@ export default function OrderSummaryCard({
     }
   }
 
-  async function onConfirmAndPay() {
+  function parseMandateWarning(err) {
+    try {
+      const parsed = JSON.parse(err.message);
+      if (parsed?.code === "MANDATE_CAP_WARNING") return parsed;
+    } catch {
+      /* not JSON */
+    }
+    return null;
+  }
+
+  async function onConfirmAndPay(acknowledgeImpulseWarning = false) {
     if (!proposal?.id) return;
     setBusy(true);
     setMessage("");
     try {
-      const result = await confirmProposal(proposal.id, proposal.total_inr);
+      const result = await confirmProposal(
+        proposal.id,
+        proposal.total_inr,
+        acknowledgeImpulseWarning
+      );
+      setImpulseWarning(null);
       setProposal(result.proposal);
       setLocalCheckout(result);
       onCheckoutReady?.(result);
@@ -94,7 +110,13 @@ export default function OrderSummaryCard({
         await openRazorpayCheckout(result);
       }
     } catch (err) {
-      setMessage(err.message);
+      const warning = parseMandateWarning(err);
+      if (warning) {
+        setImpulseWarning(warning);
+        setMessage(warning.message);
+      } else {
+        setMessage(err.message);
+      }
     } finally {
       setBusy(false);
     }
@@ -208,11 +230,41 @@ export default function OrderSummaryCard({
         </div>
       )}
 
-      {status === "awaiting_confirmation" && (
+      {status === "awaiting_confirmation" && !impulseWarning && (
         <div className="actions">
-          <button type="button" disabled={busy} onClick={onConfirmAndPay}>
+          <button type="button" disabled={busy} onClick={() => onConfirmAndPay(false)}>
             Confirm & pay ₹{proposal.total_inr}
           </button>
+        </div>
+      )}
+
+      {impulseWarning && (
+        <div className="merchant-pending mandate-warn">
+          <p className="msg">{impulseWarning.message}</p>
+          <p className="muted">
+            This pause is here to reduce impulsive shopping. You can still continue
+            anyway.
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onConfirmAndPay(true)}
+            >
+              Continue anyway
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy}
+              onClick={() => {
+                setImpulseWarning(null);
+                setMessage("Stopped at the impulse-shopping warning.");
+              }}
+            >
+              Stop here
+            </button>
+          </div>
         </div>
       )}
 

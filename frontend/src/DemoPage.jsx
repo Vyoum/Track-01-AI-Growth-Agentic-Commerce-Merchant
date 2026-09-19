@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import DecisionCenter from "./DecisionCenter.jsx";
 import NavBar from "./NavBar.jsx";
 import Scoreboard from "./Scoreboard.jsx";
@@ -10,7 +10,9 @@ import {
   fetchGrowthMetrics,
   fetchHealth,
   fetchMeta,
+  failPayment,
   fetchProposalAudit,
+  fetchSpendMandate,
   openRazorpayCheckout,
   sendChat,
   verifyPayment,
@@ -108,10 +110,14 @@ export default function DemoPage() {
   const [outcome, setOutcome] = useState(null);
   const [agentProof, setAgentProof] = useState(null);
   const [awaitingMerchant, setAwaitingMerchant] = useState(false);
+  const [awaitingRazorpay, setAwaitingRazorpay] = useState(false);
+  const [mandate, setMandate] = useState(null);
+  const [mandateWarning, setMandateWarning] = useState(null);
   const [totalMs, setTotalMs] = useState(null);
 
   const stepSeq = useRef(0);
   const merchantResolver = useRef(null);
+  const mandateResolver = useRef(null);
 
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
   const pace = PACES.find((p) => p.id === paceId)?.ms ?? 900;
@@ -156,6 +162,67 @@ export default function DemoPage() {
     resolve?.(decision);
   }
 
+  function waitForMandateBypass() {
+    return new Promise((resolve) => {
+      mandateResolver.current = resolve;
+    });
+  }
+
+  function resolveMandate(proceed) {
+    const resolve = mandateResolver.current;
+    mandateResolver.current = null;
+    resolve?.(proceed);
+  }
+
+  function parseMandateWarning(err) {
+    try {
+      const parsed = JSON.parse(err.message);
+      if (parsed?.code === "MANDATE_CAP_WARNING") return parsed;
+    } catch {
+      /* not JSON */
+    }
+    return null;
+  }
+
+  async function confirmWithMandate(proposal, ack = false) {
+    try {
+      return await confirmProposalForUser(
+        proposal.id,
+        proposal.total_inr,
+        proposal.user_id,
+        `judge_${proposal.id}`,
+        ack
+      );
+    } catch (err) {
+      const warning = parseMandateWarning(err);
+      if (!warning) throw err;
+      setMandateWarning(warning);
+      addStep({
+        actor: "GUARDRAILS",
+        title: "Impulse-shopping warning",
+        detail: warning.message,
+        notes: [
+          `${warning.period} cap ₹${warning.cap_inr} · remaining ₹${warning.remaining_inr}`,
+          "You can continue anyway — this pause is not a hard block.",
+        ],
+      });
+      const proceed = await waitForMandateBypass();
+      setMandateWarning(null);
+      if (!proceed) {
+        const stop = new Error("Stopped at impulse-shopping warning");
+        stop.mandateStop = true;
+        throw stop;
+      }
+      return confirmProposalForUser(
+        proposal.id,
+        proposal.total_inr,
+        proposal.user_id,
+        `judge_${proposal.id}`,
+        true
+      );
+    }
+  }
+
   async function run() {
     setRunning(true);
     setError("");
@@ -165,13 +232,18 @@ export default function DemoPage() {
     setAudit(null);
     setOutcome(null);
     setAgentProof(null);
+    setAwaitingRazorpay(false);
+    setMandateWarning(null);
     setTotalMs(null);
     stepSeq.current = 0;
     const runStart = performance.now();
     const scenarioInput = scenario.build(meta?.demo_user_id || "demo_user_01");
-    const judgeSessionId = `judge_${Date.now()}`;
+    const judgeSessionId = `judge_${scenarioInput.user_id}`;
 
     try {
+      fetchSpendMandate(scenarioInput.user_id || scenarioInput.userId, judgeSessionId)
+        .then(setMandate)
+        .catch(() => {});
       addStep({
         actor: "CUSTOMER",
         title: "Request received",
@@ -402,20 +474,16 @@ export default function DemoPage() {
 
       key = beginStep({ actor: "RAZORPAY", title: "Creating order" });
       t0 = performance.now();
-      const confirmed = await confirmProposalForUser(
-        current.id,
-        current.total_inr,
-        current.user_id,
-        `judge_${current.id}`
-      );
+      const confirmed = await confirmWithMandate(current);
+      if (confirmed.spend_mandate) setMandate(confirmed.spend_mandate);
       const payment = confirmed.payment;
       endStep(key, {
         ms: Math.round(performance.now() - t0),
         detail: `${payment.razorpay_order_id} · ${inr(payment.amount_inr)}`,
         notes: [
           payment.mock
-            ? "Mock order (no Razorpay keys configured)"
-            : "Razorpay test mode order",
+            ? "Labelled mock order — Checkout.js does not open (no usable rzp_test_ keys)"
+            : "Live Razorpay test-mode order.create — id is order_… not order_mock_…",
         ],
       });
       setCheckoutResult(confirmed);
@@ -443,33 +511,86 @@ export default function DemoPage() {
         key = beginStep({
           actor: "RAZORPAY",
           title: "Awaiting Razorpay test checkout",
-          detail: "Complete the payment in the Razorpay modal.",
+          detail:
+            "Complete payment in Checkout.js for a signature-verified capture, or dismiss (X) for a graceful fail.",
         });
-        verified = await new Promise((resolve, reject) => {
-          openRazorpayCheckout(
-            confirmed,
-            async (response) => {
-              try {
-                resolve(
-                  await verifyPayment({
-                    payment_id: payment.id,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature,
-                  })
-                );
-              } catch (err) {
-                reject(err);
+        setAwaitingRazorpay(true);
+        try {
+          verified = await new Promise((resolve, reject) => {
+            openRazorpayCheckout(
+              confirmed,
+              async (response) => {
+                try {
+                  resolve(
+                    await verifyPayment({
+                      payment_id: payment.id,
+                      razorpay_order_id: response.razorpay_order_id,
+                      razorpay_payment_id: response.razorpay_payment_id,
+                      razorpay_signature: response.razorpay_signature,
+                    })
+                  );
+                } catch (err) {
+                  reject(err);
+                }
+              },
+              async () => {
+                try {
+                  const failed = await failPayment(
+                    current.id,
+                    "user_cancelled"
+                  );
+                  const err = new Error("Razorpay checkout dismissed");
+                  err.gracefulFail = failed;
+                  reject(err);
+                } catch (err) {
+                  reject(err);
+                }
               }
-            },
-            () => reject(new Error("Razorpay checkout dismissed"))
-          ).catch(reject);
-        });
+            ).catch(reject);
+          });
+        } catch (err) {
+          setAwaitingRazorpay(false);
+          if (err.gracefulFail) {
+            const failed = err.gracefulFail;
+            endStep(key, {
+              status: "blocked",
+              title: "Checkout dismissed — no money moved",
+              detail: failed.message || "Payment cancelled.",
+              notes: [
+                `Live test order ${payment.razorpay_order_id} was created`,
+                "payment_failed recorded; realized uplift stays 0",
+                "This proposal is terminal — retry with a new run",
+              ],
+            });
+            setCheckoutResult(failed);
+            setProposal(failed.proposal);
+            setOutcome({
+              failed: true,
+              live: true,
+              baseline: current.baseline_total_inr,
+              paid: null,
+              uplift: 0,
+              orderId: payment.razorpay_order_id,
+              message: failed.message,
+            });
+            setTotalMs(Math.round(performance.now() - runStart));
+            const auditData = await fetchProposalAudit(failed.proposal.id);
+            setAudit(auditData);
+            refreshMetrics();
+            return;
+          }
+          throw err;
+        }
+        setAwaitingRazorpay(false);
         endStep(key, {
-          title: "Payment verified by signature",
+          title: "Payment verified by Razorpay signature",
           detail: `Payment ${verified.payment.status} · ${inr(
             verified.payment.amount_inr
           )}`,
+          notes: [
+            `Live order ${verified.payment?.razorpay_order_id}`,
+            "realized_paid_uplift is set only after this verify",
+          ],
         });
       }
 
@@ -484,10 +605,17 @@ export default function DemoPage() {
         detail: `Baseline ${inr(growth.baseline_total_inr)} → paid ${inr(
           growth.paid_total_inr
         )} · realized uplift ${inr(growth.realized_paid_uplift ?? 0)}`,
-        notes: ["Uplift counts only after a verified payment."],
+        notes: [
+          payment.mock
+            ? "Mock verify — labelled, not a dashboard transaction"
+            : "Uplift counts only after a signature-verified Razorpay payment.",
+        ],
       });
 
+      if (verified.spend_mandate) setMandate(verified.spend_mandate);
       setOutcome({
+        failed: false,
+        live: !payment.mock,
         baseline: growth.baseline_total_inr,
         paid: growth.paid_total_inr,
         uplift: growth.realized_paid_uplift ?? 0,
@@ -499,15 +627,35 @@ export default function DemoPage() {
       setAudit(auditData);
       refreshMetrics();
     } catch (err) {
-      setError(err.message || "Run failed");
-      setSteps((prev) =>
-        prev.map((s) =>
-          s.status === "running" ? { ...s, status: "blocked" } : s
-        )
-      );
+      if (err.mandateStop) {
+        setError("");
+        setOutcome({
+          failed: true,
+          live: false,
+          baseline: proposal?.baseline_total_inr,
+          paid: null,
+          uplift: 0,
+          orderId: "—",
+          message:
+            "Stopped after the impulse-shopping warning. No Razorpay order was created.",
+        });
+      } else {
+        setError(err.message || "Run failed");
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.status === "running" ? { ...s, status: "blocked" } : s
+          )
+        );
+      }
     } finally {
       setAwaitingMerchant(false);
+      setAwaitingRazorpay(false);
       merchantResolver.current = null;
+      if (mandateResolver.current) {
+        mandateResolver.current(false);
+        mandateResolver.current = null;
+      }
+      setMandateWarning(null);
       setRunning(false);
     }
   }
@@ -640,6 +788,19 @@ export default function DemoPage() {
             The run will pause at the merchant gate so you can approve it live.
           </p>
         )}
+        {health?.razorpay_test_ready ? (
+          <p className="muted demo-hint">
+            Razorpay test keys are live. Complete Checkout.js for a paid order
+            (`order_…`), or dismiss the modal for a graceful fail — no realized
+            uplift until signature verify.
+          </p>
+        ) : (
+          <p className="muted demo-hint">
+            Placeholder Razorpay keys: this run uses a labelled mock order
+            (`order_mock_…`), not the dashboard. Paste real `rzp_test_` keys to
+            open Checkout.js.
+          </p>
+        )}
       </section>
 
       {error && <p className="msg merchant-toast error">{error}</p>}
@@ -686,25 +847,97 @@ export default function DemoPage() {
               </div>
             </div>
           )}
+
+          {awaitingRazorpay && (
+            <div className="demo-gate demo-razorpay-wait">
+              <p className="merchant-eyebrow">Live Razorpay test checkout</p>
+              <p className="merchant-copy">
+                Checkout.js is open on a real test-mode order. Complete payment
+                to signature-verify and record realized uplift. Dismiss the
+                modal (X) to fail safely — no uplift, proposal terminal.
+              </p>
+            </div>
+          )}
+
+          {mandateWarning && (
+            <div className="demo-gate demo-mandate-warn">
+              <p className="merchant-eyebrow">Impulse-shopping pause</p>
+              <p className="merchant-copy">{mandateWarning.message}</p>
+              <p className="muted">
+                Caps: session ₹2,000 · day ₹3,000 · month ₹7,000. This is a
+                warning, not a hard block — you can continue anyway.
+              </p>
+              <div className="actions">
+                <button type="button" onClick={() => resolveMandate(true)}>
+                  Continue anyway
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => resolveMandate(false)}
+                >
+                  Stop here
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="demo-side">
+          {mandate && (
+            <section className="panel demo-mandate">
+              <h2>Spend mandate</h2>
+              <p className="muted demo-hint">
+                Persistent caps slow impulsive repeat checkouts. You can still
+                continue after an explicit warning.
+              </p>
+              <dl className="summary-grid">
+                {(mandate.ledgers || []).map((ledger) => (
+                  <Fragment key={ledger.period}>
+                    <dt>{ledger.period}</dt>
+                    <dd>
+                      ₹{ledger.spent_so_far_inr} / ₹{ledger.cap_inr}
+                      <span className="muted">
+                        {" "}
+                        · ₹{ledger.remaining_inr} left
+                      </span>
+                    </dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </section>
+          )}
           <section className="panel demo-outcome">
             <h2>Outcome</h2>
             {outcome ? (
               <>
                 <dl className="summary-grid">
+                  <dt>Settlement</dt>
+                  <dd>
+                    {outcome.failed
+                      ? "Failed · not captured"
+                      : outcome.live
+                        ? "Razorpay test mode (live order)"
+                        : "Labelled mock (no dashboard tx)"}
+                  </dd>
                   <dt>Baseline</dt>
                   <dd>{inr(outcome.baseline)}</dd>
                   <dt>Paid</dt>
-                  <dd className="demo-paid">{inr(outcome.paid)}</dd>
+                  <dd className={outcome.failed ? "dc-fail" : "demo-paid"}>
+                    {outcome.failed ? "Not paid" : inr(outcome.paid)}
+                  </dd>
                   <dt>Realized uplift</dt>
-                  <dd className="dc-pass">{inr(outcome.uplift)}</dd>
+                  <dd className={outcome.failed ? "dc-fail" : "dc-pass"}>
+                    {inr(outcome.uplift ?? 0)}
+                  </dd>
                   <dt>Order</dt>
                   <dd className="dc-mono">{outcome.orderId}</dd>
                 </dl>
                 <p className="muted demo-hint">
-                  Uplift is recorded only after signature-verified payment.
+                  {outcome.failed
+                    ? outcome.message ||
+                      "Money path failed safely. Growth did not record uplift."
+                    : "Uplift is recorded only after signature-verified payment."}
                 </p>
               </>
             ) : (

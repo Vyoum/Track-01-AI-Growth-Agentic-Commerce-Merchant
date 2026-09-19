@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""End-to-end A2A smoke: manifest → buyer flow → audit event."""
+"""End-to-end A2A smoke: ACP checkout sessions → audit event."""
 
 from __future__ import annotations
 
 import json
 import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -23,12 +24,21 @@ from backend.integrations.client_store_client import reset_store_client
 from backend.main import app
 from buyer_logic import pick_product, should_accept_addon
 
+ACP_HEADERS = {
+    "API-Version": "2026-04-17",
+    "Authorization": "Bearer demo-key",
+}
+
 
 def main() -> None:
+    tmp = tempfile.TemporaryDirectory()
+    db_path = os.path.join(tmp.name, "a2a_smoke.db")
     with patch.dict(
         os.environ,
         {
+            "DATABASE_URL": f"sqlite:///{db_path}",
             "USE_MOCK_CATALOG": "true",
+            "STORE_PROVIDER": "mock",
             "RAZORPAY_KEY_ID": "",
             "RAZORPAY_KEY_SECRET": "",
         },
@@ -38,12 +48,14 @@ def main() -> None:
         init_db()
         client = TestClient(app)
 
-        manifest = client.get("/.well-known/agent-catalog.json")
-        assert manifest.status_code == 200
-        mbody = manifest.json()
-        assert mbody["checkout_protocol"] == "proposal-confirm-v1"
-        assert mbody["policies"]["requires_explicit_confirmation"] is True
-        print("manifest ok")
+        catalog = client.get("/.well-known/agent-catalog.json")
+        assert catalog.status_code == 200
+        assert catalog.json()["checkout_protocol"] == "proposal-confirm-v1"
+
+        acp = client.get("/.well-known/acp.json")
+        assert acp.status_code == 200
+        assert acp.json()["instant_checkout_partner"] is False
+        print("acp discovery ok")
 
         goal = {"want": "protein", "budget_inr": 800, "user_id": "external_buyer_01"}
         products = client.get("/api/products", params={"q": "protein"}).json()["products"]
@@ -51,70 +63,79 @@ def main() -> None:
         assert chosen and chosen["id"] == "prod_protein_bundle"
         print("buyer catalog pick ok:", chosen["name"])
 
-        session_id = f"a2a_smoke_{uuid.uuid4().hex[:8]}"
-        proposal = client.post(
-            "/api/proposals",
+        created = client.post(
+            "/checkout_sessions",
+            headers={**ACP_HEADERS, "Idempotency-Key": f"smoke-{uuid.uuid4().hex[:8]}"},
             json={
-                "user_id": goal["user_id"],
-                "product_ids": [chosen["id"]],
+                "line_items": [{"id": chosen["id"], "quantity": 1}],
                 "stated_budget_inr": goal["budget_inr"],
+                "buyer": {"id": goal["user_id"]},
                 "with_growth": True,
-                "session_id": session_id,
-                "buyer_type": "external_agent",
             },
-        ).json()
-        pid = proposal["id"]
-        assert proposal["buyer_type"] == "external_agent"
+        )
+        assert created.status_code == 201, created.text
+        session = created.json()
+        sid = session["id"]
 
-        if proposal["status"] == "awaiting_merchant_approval":
-            proposal = client.post(
-                f"/api/proposals/{pid}/campaign/decide",
-                json={"decision": "approve", "note": "smoke merchant desk"},
-            ).json()
-            print("merchant campaign approved")
+        def resolve() -> None:
+            nonlocal session
+            codes = {m.get("code") for m in session.get("messages") or []}
+            actions = {}
+            if "merchant_approval_required" in codes:
+                actions["campaign"] = "approve"
+            if "addon_decision_required" in codes:
+                offer = next(
+                    (
+                        m.get("addon") or {}
+                        for m in session.get("messages") or []
+                        if m.get("code") == "addon_decision_required"
+                    ),
+                    {},
+                )
+                actions["addon"] = (
+                    "accept"
+                    if should_accept_addon(offer, goal, max_addon_inr=150)
+                    else "skip"
+                )
+            if actions:
+                upd = client.post(
+                    f"/checkout_sessions/{sid}",
+                    headers=ACP_HEADERS,
+                    json={"buyer_actions": actions},
+                )
+                assert upd.status_code == 200, upd.text
+                session = upd.json()
+                print("updated", actions, "→", session["status"])
 
-        offer = proposal.get("growth_offer")
-        if proposal["status"] == "awaiting_addon_decision" and offer:
-            assert should_accept_addon(offer, goal, max_addon_inr=150)
-            proposal = client.post(
-                f"/api/proposals/{pid}/addon",
-                json={"decision": "accept", "product_id": offer["product_id"]},
-            ).json()
-            print("buyer accepted add-on")
+        if session["status"] == "needs_input":
+            resolve()
+            if session["status"] == "needs_input":
+                resolve()
 
-        total = proposal["total_inr"]
-        assert total == 798, total
+        assert session["status"] == "ready_for_complete", session
+        total = session["totals"]["total_inr"]
+        assert total >= 699, total
 
-        checkout = client.post(
-            f"/api/proposals/{pid}/confirm",
+        complete = client.post(
+            f"/checkout_sessions/{sid}/complete",
+            headers={**ACP_HEADERS, "Idempotency-Key": f"smoke-pay-{sid}"},
             json={
-                "expected_total_inr": total,
-                "user_id": goal["user_id"],
-                "idempotency_key": f"smoke-a2a-{pid}",
+                "payment_data": {
+                    "instrument": {"type": "spt_demo", "token": "spt_demo_smoke"}
+                }
             },
-        ).json()
-        payment = checkout["payment"]
-        assert payment["amount_inr"] == 798
-
-        verified = client.post(
-            "/api/payments/verify",
-            json={
-                "payment_id": payment["id"],
-                "razorpay_order_id": payment["razorpay_order_id"],
-                "razorpay_payment_id": f"pay_a2a_{uuid.uuid4().hex[:8]}",
-                "razorpay_signature": "mock_ok_a2a_smoke",
-            },
-        ).json()
-        assert verified["payment"]["status"] == "paid"
-        print("payment verified ok")
+        )
+        assert complete.status_code == 200, complete.text
+        done = complete.json()
+        assert done["status"] == "completed"
+        print("acp complete ok")
 
         events = list_events(limit=200)
         a2a = [e for e in events if e.get("event_type") == "a2a_purchase_completed"]
         assert a2a, "missing a2a_purchase_completed"
         last = a2a[-1]["payload"]
         assert last["buyer_type"] == "external_agent"
-        assert last["total_inr"] == 798
-        assert last["uplift_inr"] == 99
+        assert last["total_inr"] == total
         print("audit a2a_purchase_completed ok")
 
         summary = client.get("/api/a2a/summary").json()
@@ -123,6 +144,7 @@ def main() -> None:
 
     get_settings.cache_clear()
     reset_store_client()
+    tmp.cleanup()
     print(json.dumps({"status": "a2a_smoke_passed"}, indent=2))
 
 

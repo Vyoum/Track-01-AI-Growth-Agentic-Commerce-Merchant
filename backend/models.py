@@ -206,6 +206,7 @@ class ConfirmationRequest(BaseModel):
     expected_total_inr: int = Field(ge=1, le=5000)
     idempotency_key: str | None = None
     user_id: str | None = None
+    acknowledge_impulse_warning: bool = False
 
 
 class AddonDecisionRequest(BaseModel):

@@ -36,6 +36,11 @@ TRACKED_EVENT_TYPES = (
     "payment_failed",
     "razorpay_order_create_failed",
     "a2a_purchase_completed",
+    "acp_checkout_session_created",
+    "acp_checkout_completed",
+    "mandate_impulse_warning",
+    "mandate_cap_bypassed",
+    "mandate_spend_recorded",
     "demo_replay_session",
 )
 

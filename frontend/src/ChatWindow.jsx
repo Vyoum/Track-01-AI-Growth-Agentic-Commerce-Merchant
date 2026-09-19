@@ -72,11 +72,19 @@ export default function ChatWindow({
           },
           async () => {
             if (res.proposal?.id) {
-              await failPayment(res.proposal.id, "user_cancelled");
+              try {
+                await failPayment(res.proposal.id, "user_cancelled");
+              } catch {
+                /* already paid or already failed */
+              }
             }
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", text: "Payment cancelled. Say 'confirm payment' to try again." },
+              {
+                role: "assistant",
+                text:
+                  "Checkout dismissed. This proposal is terminal — no realized uplift. Start a new order to retry.",
+              },
             ]);
           }
         );

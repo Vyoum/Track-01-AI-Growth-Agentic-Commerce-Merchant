@@ -10,6 +10,7 @@ export default defineConfig({
       "/health": "http://127.0.0.1:8000",
       "/api": "http://127.0.0.1:8000",
       "/.well-known": "http://127.0.0.1:8000",
+      "/checkout_sessions": "http://127.0.0.1:8000",
     },
   },
 });

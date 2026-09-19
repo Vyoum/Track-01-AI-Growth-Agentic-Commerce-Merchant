@@ -4,6 +4,7 @@ import NavBar from "./NavBar.jsx";
 import {
   fetchA2aSummary,
   fetchAgentManifest,
+  fetchAcpManifest,
   fetchHealth,
   fetchProposalAudit,
 } from "./api.js";
@@ -11,6 +12,7 @@ import { runBuyerPurchase } from "./buyerAgent.js";
 
 export default function A2aPage() {
   const [manifest, setManifest] = useState(null);
+  const [acpManifest, setAcpManifest] = useState(null);
   const [summary, setSummary] = useState(null);
   const [health, setHealth] = useState(null);
   const [want, setWant] = useState("protein");
@@ -28,12 +30,14 @@ export default function A2aPage() {
 
   const refreshMeta = useCallback(async () => {
     try {
-      const [m, s, h] = await Promise.all([
+      const [m, acp, s, h] = await Promise.all([
         fetchAgentManifest(),
+        fetchAcpManifest(),
         fetchA2aSummary(),
         fetchHealth(),
       ]);
       setManifest(m);
+      setAcpManifest(acp);
       setSummary(s);
       setHealth(h);
       setError("");
@@ -93,8 +97,9 @@ export default function A2aPage() {
           <h1>A2A Buyer Agent</h1>
           <p className="sub">
             Autonomous buyer discovers{" "}
-            <code>/.well-known/agent-catalog.json</code>, purchases via public
-            APIs only — same gates as human checkout.
+            <code>/.well-known/acp.json</code>, opens a checkout session, then
+            completes with a demo delegated token. Same gates as human checkout
+            — not ChatGPT Instant Checkout.
           </p>
         </div>
         <div className="merchant-header-actions">
@@ -121,6 +126,8 @@ export default function A2aPage() {
               <dl className="summary-grid a2a-manifest-summary">
                 <dt>Protocol</dt>
                 <dd>{manifest.checkout_protocol}</dd>
+                <dt>ACP</dt>
+                <dd>{acpManifest?.api_version || "—"}</dd>
                 <dt>Merchant</dt>
                 <dd>{manifest.merchant}</dd>
                 <dt>Explicit confirm</dt>
@@ -139,7 +146,7 @@ export default function A2aPage() {
                 </dd>
               </dl>
               <pre className="a2a-json">
-                {JSON.stringify(manifest, null, 2)}
+                {JSON.stringify(acpManifest || manifest, null, 2)}
               </pre>
             </>
           ) : (
@@ -150,7 +157,8 @@ export default function A2aPage() {
         <section className="panel a2a-panel">
           <h2>Run buyer agent</h2>
           <p className="muted">
-            Simulates <code>buyer_agent/run_purchase.py</code> in the browser.
+            Simulates <code>buyer_agent/run_purchase.py</code> over ACP{" "}
+            <code>/checkout_sessions</code>.
           </p>
 
           <div className="a2a-form">
@@ -215,6 +223,8 @@ export default function A2aPage() {
             <dl className="summary-grid a2a-result">
               <dt>Status</dt>
               <dd className="dc-mono">{result.status}</dd>
+              <dt>Session</dt>
+              <dd className="dc-mono">{result.checkout_session_id || "—"}</dd>
               <dt>Proposal</dt>
               <dd className="dc-mono">{result.proposal_id}</dd>
               <dt>Total</dt>

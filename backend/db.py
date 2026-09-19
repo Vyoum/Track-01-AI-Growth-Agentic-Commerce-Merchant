@@ -60,6 +60,38 @@ CREATE TABLE IF NOT EXISTS campaign_policies (
     note TEXT,
     updated_at TEXT NOT NULL
 );
+
+-- Persistent agent spend caps (session / day / month). spent_so_far moves
+-- only after signature-verified payment. reserved_inr is a CAS hold taken
+-- at confirm so two carts cannot both spend the same remaining room.
+CREATE TABLE IF NOT EXISTS spend_mandates (
+    mandate_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    period_key TEXT NOT NULL,
+    cap_inr INTEGER NOT NULL,
+    spent_so_far_inr INTEGER NOT NULL DEFAULT 0,
+    reserved_inr INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS acp_sessions (
+    checkout_session_id TEXT PRIMARY KEY,
+    proposal_id TEXT NOT NULL,
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_acp_sessions_idempotency
+ON acp_sessions(idempotency_key);
+
+
+-- One hold per proposal so confirm retries do not double-reserve.
+CREATE TABLE IF NOT EXISTS spend_mandate_holds (
+    proposal_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    session_id TEXT,
+    amount_inr INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -77,11 +109,20 @@ def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def _migrate_spend_mandate_columns(conn: sqlite3.Connection) -> None:
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(spend_mandates)").fetchall()}
+    if cols and "reserved_inr" not in cols:
+        conn.execute(
+            "ALTER TABLE spend_mandates ADD COLUMN reserved_inr INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 def init_db(db_path: Path | None = None) -> Path:
     settings = get_settings()
     path = db_path or settings.sqlite_path
     path.parent.mkdir(parents=True, exist_ok=True)
     with connect(path) as conn:
         conn.executescript(SCHEMA)
+        _migrate_spend_mandate_columns(conn)
         conn.commit()
     return path

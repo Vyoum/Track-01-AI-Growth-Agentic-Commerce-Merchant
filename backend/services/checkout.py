@@ -924,6 +924,7 @@ def confirm_proposal(
     body: ConfirmationRequest,
     *,
     force_mock: bool = False,
+    mock_order: bool | None = None,
 ) -> dict:
     proposal = get_proposal(proposal_id)
 
@@ -996,6 +997,25 @@ def confirm_proposal(
         },
     )
 
+    from backend.services.spend_mandate import (
+        assert_within_mandate,
+        mandate_applies,
+        release_reservation,
+    )
+
+    mandate_state = assert_within_mandate(
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        cart_total_inr=proposal.total_inr,
+        proposal_id=proposal.id,
+        force_mock=force_mock,
+        acknowledge_impulse_warning=bool(body.acknowledge_impulse_warning),
+    )
+    mandate_skip = not mandate_applies(
+        session_id=proposal.session_id, force_mock=force_mock
+    )
+    use_mock_order = force_mock if mock_order is None else mock_order
+
     claimed, claimed_proposal = store.claim_proposal_for_payment(proposal.id)
     if not claimed:
         existing_payment = store.get_payment_by_proposal(proposal.id)
@@ -1007,6 +1027,7 @@ def confirm_proposal(
                 "checkout": _checkout_payload(existing_payment, latest),
                 "idempotent_replay": True,
                 "growth_summary": _growth_summary(latest),
+                "spend_mandate": mandate_state,
             }
         raise HTTPException(
             status_code=409,
@@ -1047,7 +1068,7 @@ def confirm_proposal(
                 amount_inr=proposal.total_inr,
                 receipt=receipt,
                 notes=notes,
-                force_mock=force_mock,
+                force_mock=use_mock_order,
             )
             break
         except RazorpayConfigError as exc:
@@ -1061,6 +1082,13 @@ def confirm_proposal(
             )
             if attempts > max_retries:
                 proposal = store.mark_proposal_status(proposal, ProposalStatus.FAILED)
+                release_reservation(
+                    user_id=proposal.user_id,
+                    session_id=proposal.session_id,
+                    amount_inr=proposal.total_inr,
+                    proposal_id=proposal.id,
+                    skip=mandate_skip,
+                )
                 raise HTTPException(
                     status_code=502,
                     detail={
@@ -1115,6 +1143,7 @@ def confirm_proposal(
         "checkout": _checkout_payload(payment, proposal),
         "idempotent_replay": False,
         "growth_summary": _growth_summary(proposal),
+        "spend_mandate": mandate_state,
         "next_step": (
             "Open Razorpay Checkout with checkout payload, then POST /api/payments/verify"
             if not payment.mock
@@ -1172,6 +1201,17 @@ def verify_payment(body: VerifyPaymentRequest) -> dict:
             proposal_id=proposal.id,
             payload={"payment_id": payment.id},
         )
+        from backend.services.spend_mandate import mandate_applies, release_reservation
+
+        release_reservation(
+            user_id=proposal.user_id,
+            session_id=proposal.session_id,
+            amount_inr=payment.amount_inr,
+            proposal_id=proposal.id,
+            skip=not mandate_applies(
+                session_id=proposal.session_id, force_mock=False
+            ),
+        )
         raise HTTPException(status_code=400, detail="Invalid payment signature")
 
     payment.razorpay_payment_id = body.razorpay_payment_id
@@ -1209,6 +1249,17 @@ def verify_payment(body: VerifyPaymentRequest) -> dict:
             "buyer_type": proposal.buyer_type,
         },
     )
+    from backend.services.spend_mandate import mandate_applies, record_verified_spend
+
+    mandate_state = record_verified_spend(
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        amount_inr=payment.amount_inr,
+        proposal_id=proposal.id,
+        skip=not mandate_applies(
+            session_id=proposal.session_id, force_mock=False
+        ),
+    )
     if proposal.buyer_type == "external_agent":
         uplift = payment.payload.get("realized_paid_uplift") or 0
         log_event(
@@ -1230,6 +1281,7 @@ def verify_payment(body: VerifyPaymentRequest) -> dict:
         "payment": payment,
         "idempotent_replay": False,
         "growth_summary": _growth_summary(proposal),
+        "spend_mandate": mandate_state,
     }
 
 
@@ -1245,6 +1297,15 @@ def fail_payment(proposal_id: str, body: FailPaymentRequest) -> dict:
     payment.payload["failure_reason"] = body.reason
     store.save_payment(payment)
     proposal = store.mark_proposal_status(proposal, ProposalStatus.FAILED)
+    from backend.services.spend_mandate import mandate_applies, release_reservation
+
+    release_reservation(
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        amount_inr=payment.amount_inr,
+        proposal_id=proposal.id,
+        skip=not mandate_applies(session_id=proposal.session_id, force_mock=False),
+    )
     log_event(
         "payment_failed",
         user_id=proposal.user_id,
@@ -1267,6 +1328,15 @@ def cancel_proposal(proposal_id: str) -> Proposal:
     proposal = get_proposal(proposal_id)
     if proposal.status == ProposalStatus.PAID:
         raise HTTPException(status_code=409, detail="Paid proposals cannot be cancelled")
+    from backend.services.spend_mandate import mandate_applies, release_reservation
+
+    release_reservation(
+        user_id=proposal.user_id,
+        session_id=proposal.session_id,
+        amount_inr=proposal.total_inr,
+        proposal_id=proposal.id,
+        skip=not mandate_applies(session_id=proposal.session_id, force_mock=False),
+    )
     proposal = store.mark_proposal_status(proposal, ProposalStatus.CANCELLED)
     log_event(
         "proposal_cancelled",

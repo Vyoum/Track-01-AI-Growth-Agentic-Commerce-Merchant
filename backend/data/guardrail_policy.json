@@ -8,6 +8,11 @@
     "proposal_ttl_seconds": 600,
     "payment_max_retries": 1
   },
+  "spend_mandates": {
+    "session_cap_inr": 2000,
+    "day_cap_inr": 3000,
+    "month_cap_inr": 7000
+  },
   "gates": {
     "require_addon_decision_before_payment": true,
     "require_explicit_payment_confirmation": true,

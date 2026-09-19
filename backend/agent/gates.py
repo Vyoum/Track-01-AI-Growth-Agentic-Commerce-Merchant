@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from fastapi import HTTPException
+
 from backend.models import AddonDecisionRequest, ConfirmationRequest, ProposalStatus
 from backend.services import checkout, store
 from backend.services.data_loader import load_policy
@@ -139,14 +141,30 @@ def try_gate_action(
 
     if proposal.status == ProposalStatus.AWAITING_CONFIRMATION:
         if gate == "payment_confirm":
-            result = checkout.confirm_proposal(
-                proposal_id,
-                ConfirmationRequest(
-                    expected_total_inr=proposal.total_inr,
-                    user_id=user_id,
-                    idempotency_key=f"chat_{proposal_id}_{proposal.total_inr}",
-                ),
-            )
+            try:
+                result = checkout.confirm_proposal(
+                    proposal_id,
+                    ConfirmationRequest(
+                        expected_total_inr=proposal.total_inr,
+                        user_id=user_id,
+                        idempotency_key=f"chat_{proposal_id}_{proposal.total_inr}",
+                    ),
+                )
+            except HTTPException as exc:
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                if detail.get("code") == "MANDATE_CAP_WARNING":
+                    return {
+                        "handled_by": "mandate_gate",
+                        "reply": (
+                            f"{detail.get('message')} "
+                            "Say 'confirm payment' again if you still want to buy."
+                        ),
+                        "proposal": proposal.model_dump(mode="json"),
+                        "checkout": None,
+                        "payment": None,
+                        "spend_mandate": detail,
+                    }
+                raise
             pay = result["payment"]
             checkout_payload = result.get("checkout")
             reply = (

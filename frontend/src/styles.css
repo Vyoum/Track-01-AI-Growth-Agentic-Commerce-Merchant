@@ -1126,6 +1126,21 @@ hr {
   background: #201a0c;
 }
 
+.demo-razorpay-wait {
+  border-color: #2f6fed;
+  background: #0d1a33;
+}
+
+.demo-mandate-warn,
+.mandate-warn {
+  border-color: #c47b12;
+  background: #2a1d08;
+}
+
+.demo-mandate .demo-hint {
+  margin-bottom: 10px;
+}
+
 /* —— Agent timeline —— */
 .tl {
   list-style: none;

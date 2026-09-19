@@ -25,6 +25,7 @@ from backend.models import (
     AddonDecisionRequest,
     ConfirmationRequest,
     CreateProposalRequest,
+    FailPaymentRequest,
     PaymentRecord,
     PaymentStatus,
 )
@@ -245,6 +246,42 @@ class AdversarialCheckoutTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(response.status_code, 422, response.text)
+
+    def test_checkout_dismiss_fails_payment_without_realized_uplift(self) -> None:
+        proposal = self._ready_proposal()
+        confirmed = checkout.confirm_proposal(
+            proposal.id,
+            ConfirmationRequest(
+                expected_total_inr=proposal.total_inr,
+                user_id=proposal.user_id,
+                idempotency_key=f"fail-{uuid.uuid4().hex[:8]}",
+            ),
+        )
+        payment = confirmed["payment"]
+        self.assertEqual(payment.status, PaymentStatus.PENDING)
+
+        failed = checkout.fail_payment(
+            proposal.id, FailPaymentRequest(reason="user_cancelled")
+        )
+        self.assertEqual(failed["payment"].status, PaymentStatus.FAILED)
+        self.assertEqual(failed["proposal"].status.value, "failed")
+        summary = checkout._growth_summary(failed["proposal"])
+        self.assertIsNone(summary["realized_paid_uplift"])
+
+        replay = self.client.post(
+            f"/api/proposals/{proposal.id}/confirm",
+            json={
+                "expected_total_inr": proposal.total_inr,
+                "user_id": proposal.user_id,
+                "idempotency_key": f"retry-{uuid.uuid4().hex[:8]}",
+            },
+        )
+        self.assertEqual(replay.status_code, 409)
+
+        audit = self.client.get(f"/api/proposals/{proposal.id}/audit").json()
+        types = [event["event_type"] for event in audit.get("events") or []]
+        self.assertIn("payment_failed", types)
+        self.assertNotIn("payment_verified_paid", types)
 
 
 if __name__ == "__main__":
