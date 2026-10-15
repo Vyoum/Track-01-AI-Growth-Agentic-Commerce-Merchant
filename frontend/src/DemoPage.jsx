@@ -664,7 +664,7 @@ export default function DemoPage() {
     <div className="app demo-app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Razorpay Buildathon · Track 01 · Judge Mode</p>
+          <p className="eyebrow">Atelier · Judge Mode</p>
           <h1>One purchase, every decision visible</h1>
           <p className="sub">
             The request goes through live Groq tool calling when available, with

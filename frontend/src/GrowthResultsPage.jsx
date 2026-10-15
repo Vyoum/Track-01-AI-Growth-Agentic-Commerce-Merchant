@@ -89,7 +89,7 @@ export default function GrowthResultsPage() {
     <div className="app growth-app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Razorpay Buildathon · Track 01 · Measured proof</p>
+          <p className="eyebrow">Atelier · Measured proof</p>
           <h1>Growth Results</h1>
           <p className="sub">
             Aggregates folded from the audit trail. Replay a batch of synthetic

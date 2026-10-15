@@ -93,7 +93,7 @@ export default function A2aPage() {
     <div className="app a2a-app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Agent-to-Agent · Demo Desk</p>
+          <p className="eyebrow">Atelier · Agent to agent</p>
           <h1>A2A Buyer Agent</h1>
           <p className="sub">
             Autonomous buyer discovers{" "}

@@ -74,6 +74,9 @@ export default function NavBar({ current, children }) {
   return (
     <>
       <nav className="site-nav" aria-label="Demo pages">
+        <a className="nav-mark" href="/">
+          Atelier
+        </a>
         <div className="site-nav-links">
           {PAGES.map((page) => (
             <a

@@ -9,8 +9,14 @@ import {
 const STARTER = [
   {
     role: "assistant",
-    text: 'Hi! I can help you checkout. Try: "Order my usual, under ₹800"',
+    text: "Welcome in. I can assemble a cart, surface a single optional add-on, and take you through Razorpay test checkout.",
   },
+];
+
+const CHIPS = [
+  "Order my usual, under ₹800",
+  "Something protein-rich under ₹600",
+  "Skip add-ons this time",
 ];
 
 export default function ChatWindow({
@@ -31,8 +37,8 @@ export default function ChatWindow({
     el.scrollTop = el.scrollHeight;
   }, [messages, busy]);
 
-  async function send() {
-    const text = input.trim();
+  async function send(preset) {
+    const text = (preset ?? input).trim();
     if (!text || busy) return;
 
     setBusy(true);
@@ -116,12 +122,35 @@ export default function ChatWindow({
 
   return (
     <section className="panel chat">
-      <h2>Chat</h2>
+      <div className="chat-head">
+        <h2>Concierge</h2>
+        <span className="chat-live">{busy ? "Thinking" : "Live"}</span>
+      </div>
       <div className="messages" ref={messagesRef}>
         {messages.map((m, i) => (
           <div key={i} className={`bubble ${m.role}`}>
             {m.text}
           </div>
+        ))}
+        {busy && (
+          <div className="bubble assistant typing" aria-label="Assistant is typing">
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+      </div>
+      <div className="chat-chips">
+        {CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            className="chip"
+            disabled={busy}
+            onClick={() => send(chip)}
+          >
+            {chip}
+          </button>
         ))}
       </div>
       <div className="composer">
@@ -130,9 +159,9 @@ export default function ChatWindow({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           disabled={busy}
-          placeholder='e.g. "Order my usual, under ₹800"'
+          placeholder="Tell me what to order…"
         />
-        <button type="button" onClick={send} disabled={busy}>
+        <button type="button" onClick={() => send()} disabled={busy}>
           {busy ? "…" : "Send"}
         </button>
       </div>

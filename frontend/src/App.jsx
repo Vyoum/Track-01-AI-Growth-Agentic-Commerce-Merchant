@@ -85,11 +85,11 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Razorpay Buildathon · Track 01</p>
-          <h1>{meta?.merchant || "Checkout Agent"}</h1>
+          <p className="eyebrow">Atelier · Agentic Commerce</p>
+          <h1>{meta?.merchant || "The checkout, composed"}</h1>
           <p className="sub">
             {meta?.message ||
-              "Chat to order, get growth upsell, and pay via Razorpay test mode."}
+              "Speak an order. One optional add-on. Razorpay test checkout — never a second charge."}
           </p>
         </div>
         <div className="status-pill" data-ok={health?.status === "ok"}>
@@ -103,7 +103,7 @@ export default function App() {
 
       <NavBar current="/">
         <a className="nav-cta" href="/demo">
-          New here? Start with Judge Mode →
+          Judge Mode
         </a>
       </NavBar>
 

@@ -215,7 +215,7 @@ export default function GuardrailLab() {
     <div className="app guardrail-app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Adversarial Demo · Checkout Safety</p>
+          <p className="eyebrow">Atelier · Checkout safety</p>
           <h1>Guardrail Break Lab</h1>
           <p className="sub">
             Deliberately attack money-action boundaries and show the exact rejection.

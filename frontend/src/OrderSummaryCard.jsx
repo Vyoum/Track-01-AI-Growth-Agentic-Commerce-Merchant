@@ -170,11 +170,11 @@ export default function OrderSummaryCard({
 
   return (
     <section className="panel summary">
-      <h2>Order summary</h2>
+      <h2>The ticket</h2>
 
       <div className="actions">
         <button type="button" disabled={busy} onClick={startDemo}>
-          Start demo: usual under ₹800
+          Compose usual under ₹800
         </button>
       </div>
 

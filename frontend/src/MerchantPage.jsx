@@ -255,7 +255,7 @@ export default function MerchantPage() {
     <div className="app merchant-app">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Merchant · Campaign Orchestrator</p>
+          <p className="eyebrow">Atelier · Merchant desk</p>
           <h1>Growth templates</h1>
           <p className="sub">
             Enable a template once. Matching add-ons then auto-release to the
