@@ -166,6 +166,30 @@ class Settings(BaseSettings):
         """Groq key preferred; LLM_API_KEY kept for backward compatibility."""
         return (self.groq_api_key or self.llm_api_key or "").strip()
 
+    def public_llm_status(self) -> dict[str, object]:
+        """Model badge payload. Never includes the API key."""
+        configured = bool(self.effective_llm_api_key)
+        model = self.llm_model
+        provider = (self.llm_provider or "groq").strip().lower() or "groq"
+        if configured:
+            via = "Groq" if provider == "groq" else provider
+            label = f"Powered by {model} via {via}"
+            mode = "groq" if provider == "groq" else "live"
+        else:
+            label = (
+                f"Demo mode — deterministic fallback (no Groq key) · "
+                f"configured model {model}"
+            )
+            mode = "demo_mock"
+        return {
+            "provider": provider,
+            "model": model if configured else None,
+            "configured_model": model,
+            "configured": configured,
+            "mode": mode,
+            "label": label,
+        }
+
     @property
     def effective_supabase_url(self) -> str:
         return (self.supabase_url or self.store_api_base_url or "").strip()

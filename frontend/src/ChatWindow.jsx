@@ -5,13 +5,46 @@ import {
   sendChat,
   verifyPayment,
 } from "./api.js";
+import ModelBadge from "./ModelBadge.jsx";
 
-const STARTER = [
-  {
-    role: "assistant",
-    text: "Welcome in. I can assemble a cart, surface a single optional add-on, and take you through Razorpay test checkout.",
-  },
-];
+function starterFor(customer) {
+  const name = customer?.name?.split(" ")[0];
+  const budget = customer?.preferred_budget_inr;
+  const greeting = name ? `Welcome in, ${name}.` : "Welcome in.";
+  const usual = customer?.completed_orders
+    ? `your usual${budget ? ` under ₹${budget}` : ""}`
+    : "a popular starter cart";
+  return [
+    {
+      role: "assistant",
+      text: `${greeting} I can assemble ${usual}, surface a single optional add-on, and take you through Razorpay test checkout.`,
+    },
+  ];
+}
+
+function traceChips(trace) {
+  if (!trace) return [];
+  const chips = [];
+  if (trace.mode === "groq") {
+    chips.push(trace.model ? `Powered by ${trace.model} via Groq` : "Groq");
+  } else if (trace.handled_by === "checkout") {
+    chips.push("Checkout");
+  } else {
+    chips.push("Demo fallback · no Groq key");
+  }
+  if (trace.tools?.length) {
+    chips.push(trace.tools.join(" → "));
+  } else if (trace.mode === "groq") {
+    chips.push("No tool call");
+  }
+  if (typeof trace.latency_ms === "number") chips.push(`${trace.latency_ms} ms`);
+  if (trace.usage?.total_tokens) {
+    chips.push(`${trace.usage.total_tokens} tokens`);
+  } else if (trace.mode === "groq" || trace.mode === "demo_mock") {
+    chips.push("tokens n/a");
+  }
+  return chips;
+}
 
 const CHIPS = [
   "Order my usual, under ₹800",
@@ -25,8 +58,11 @@ export default function ChatWindow({
   onUserMessage,
   sessionId,
   setSessionId,
+  userId = "demo_user_01",
+  customer,
+  modelInfo,
 }) {
-  const [messages, setMessages] = useState(STARTER);
+  const [messages, setMessages] = useState(() => starterFor(customer));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const messagesRef = useRef(null);
@@ -47,11 +83,25 @@ export default function ChatWindow({
     setMessages((prev) => [...prev, { role: "user", text }]);
 
     try {
-      const res = await sendChat(text, sessionId);
+      const res = await sendChat(text, sessionId, userId);
       if (res.session_id && setSessionId) {
         setSessionId(res.session_id);
       }
-      setMessages((prev) => [...prev, { role: "assistant", text: res.reply }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: res.reply,
+          trace: {
+            handled_by: res.handled_by,
+            model: res.model,
+            mode: res.mode || (res.handled_by === "groq" ? "groq" : "demo_mock"),
+            tools: Array.isArray(res.tool_trace) ? res.tool_trace : [],
+            latency_ms: res.latency_ms,
+            usage: res.usage,
+          },
+        },
+      ]);
 
       if (res.proposal) {
         onProposalHint?.(res.proposal);
@@ -73,6 +123,7 @@ export default function ChatWindow({
               {
                 role: "assistant",
                 text: `Payment successful — ₹${verified.payment?.amount_inr}. Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}`,
+                trace: { handled_by: "checkout", mode: "checkout" },
               },
             ]);
           },
@@ -107,6 +158,7 @@ export default function ChatWindow({
           {
             role: "assistant",
             text: `Mock payment verified — ₹${verified.payment?.amount_inr}. Realized uplift: ₹${verified.growth_summary?.realized_paid_uplift ?? 0}`,
+            trace: { handled_by: "checkout", mode: "checkout" },
           },
         ]);
       }
@@ -124,12 +176,22 @@ export default function ChatWindow({
     <section className="panel chat">
       <div className="chat-head">
         <h2>Concierge</h2>
-        <span className="chat-live">{busy ? "Thinking" : "Live"}</span>
+        <div className="chat-head-meta">
+          <ModelBadge llm={modelInfo} />
+          <span className="chat-live">{busy ? "Thinking" : "Live"}</span>
+        </div>
       </div>
       <div className="messages" ref={messagesRef}>
         {messages.map((m, i) => (
-          <div key={i} className={`bubble ${m.role}`}>
-            {m.text}
+          <div key={i} className={`bubble-wrap ${m.role}`}>
+            <div className={`bubble ${m.role}`}>{m.text}</div>
+            {m.trace && (
+              <div className="bubble-trace" aria-label="Model trace">
+                {traceChips(m.trace).map((chip) => (
+                  <span key={chip}>{chip}</span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         {busy && (

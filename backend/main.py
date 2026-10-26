@@ -101,6 +101,7 @@ def meta() -> dict:
         "track": "Track 01 — AI Growth & Agentic Commerce",
         "demo_user_id": current_settings.demo_user_id,
         "currency": "INR",
+        "llm": current_settings.public_llm_status(),
         **catalog_status,
         "features": {
             "chat": True,

@@ -27,6 +27,7 @@ This project targets the official Track 01 bar: grow merchant revenue or make th
 - [Audit trail and measured results](#audit-trail-and-measured-results)
 - [Frontend demo surfaces](#frontend-demo-surfaces)
 - [Quick start](#quick-start)
+- [Demo data & model](#demo-data--model)
 - [Configuration](#configuration)
 - [API reference](#api-reference)
 - [Reproducible demo walkthrough](#reproducible-demo-walkthrough)
@@ -638,6 +639,32 @@ npm run dev
 - API documentation: http://127.0.0.1:8000/docs
 - Health check: http://127.0.0.1:8000/health
 - Agent manifest: http://127.0.0.1:8000/.well-known/agent-catalog.json
+
+---
+
+## Demo data & model
+
+The frozen hero is unchanged: **Aisha Khan** (`demo_user_01`, Mumbai) still reorders the Daily Protein Bundle at ₹699, and the complement offer is still the Shaker Bottle at ₹99 (₹798, under ₹800).
+
+Around that, the mock store now carries 14 Indian customers in `backend/data/demo_users.json` (name, `name@example.com`, `+91-90000000xx` phone, city, signup date, preferences, and completed order history). A few extra pantry SKUs — ragi cookies, haldi latte, a copper bottle, a cork yoga block — sit in `mock_catalog.json` without changing the hero complements. `campaigns.json` includes a Monsoon wellness template that does not outrank the complement add-on.
+
+Checkout, growth, and the spend ledger read that book as follows:
+
+- History and “order my usual” come from the JSON orders (Ishaan Malhotra has none, so he gets the bestseller fallback).
+- `GET /api/demo/customers` feeds the customer switcher on the checkout page. Judge Mode stays on `DEMO_USER_ID`.
+- `python scripts/seed_demo.py` runs the real proposal → add-on → mock-payment path for the other customers and writes `customers`, `conversations`, `spend_mandates`, proposals, payments, and audit events into SQLite (`backend/data/checkout_agent.db` by default). The growth dashboard then opens with paid GMV and realized uplift. Re-running is a no-op unless you pass `--force`.
+- Vikram Singh’s seeded day spend sits near the ₹3,000 cap, so switching to him and confirming another usual order shows the impulse-shopping warning. Aisha is left off that paid seed so the hero confirm stays inside the cap.
+- Harsh Patel’s seeded checkout is a cancelled payment. A gift-card attempt is rejected by the denied-category guardrail.
+
+```bash
+python scripts/seed_demo.py --force
+python scripts/seed_demo.py --db /tmp/checkout_agent.db --csv /tmp/demo-csv --force
+```
+
+The chat header, each assistant reply, the order ticket, and Judge Mode show the model in use:
+
+- With `GROQ_API_KEY` set, the badge reads **Powered by &lt;LLM_MODEL&gt; via Groq**. The name comes from `GET /api/meta` → `llm` (default `openai/gpt-oss-120b`), not from a hardcoded label. Each assistant message lists the tool the model chose, latency, and token counts when Groq returns them.
+- With no key, the same surfaces say **Demo mode — deterministic fallback (no Groq key)** and messages are marked as fallback. Usual-order checkout still runs.
 
 ---
 

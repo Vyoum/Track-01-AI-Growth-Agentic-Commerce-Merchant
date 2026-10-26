@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from typing import Any
 
@@ -193,6 +194,23 @@ def _run_groq_loop(
 
     proposal_id_from_tools: str | None = session.get("proposal_id")
     tool_trace: list[str] = []
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    def _absorb_usage(response: Any) -> None:
+        raw = getattr(response, "usage", None)
+        if raw is None:
+            return
+        for key in usage:
+            val = getattr(raw, key, None)
+            if val is None and isinstance(raw, dict):
+                val = raw.get(key)
+            if val:
+                usage[key] += int(val)
+
+    def _usage_payload() -> dict[str, int] | None:
+        if usage["total_tokens"] <= 0:
+            return None
+        return dict(usage)
 
     for _ in range(MAX_TOOL_ROUNDS):
         try:
@@ -209,8 +227,10 @@ def _run_groq_loop(
                 "proposal_id": proposal_id_from_tools,
                 "tool_trace": tool_trace,
                 "tool_used": "groq_error",
+                "usage": _usage_payload(),
                 "error": str(exc),
             }
+        _absorb_usage(response)
 
         choice = response.choices[0].message
 
@@ -264,6 +284,7 @@ def _run_groq_loop(
             "proposal_id": proposal_id_from_tools,
             "tool_trace": tool_trace,
             "tool_used": "groq",
+            "usage": _usage_payload(),
         }
 
     return {
@@ -271,6 +292,18 @@ def _run_groq_loop(
         "proposal_id": proposal_id_from_tools,
         "tool_trace": tool_trace,
         "tool_used": "groq",
+        "usage": _usage_payload(),
+    }
+
+
+def _public_usage(agent_result: dict[str, Any]) -> dict[str, int] | None:
+    usage = agent_result.get("usage")
+    if not isinstance(usage, dict) or int(usage.get("total_tokens") or 0) <= 0:
+        return None
+    return {
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
     }
 
 
@@ -280,6 +313,7 @@ def run_agent_turn(
     user_id: str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     settings = get_settings()
     uid = user_id or settings.demo_user_id
     session = get_or_create(session_id, uid)
@@ -320,7 +354,10 @@ def run_agent_turn(
             "reply": gate_reply,
             "handled_by": gate.get("handled_by"),
             "model": None,
+            "mode": "demo_mock",
             "tool_trace": [],
+            "usage": None,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
             "proposal": gate.get("proposal"),
             "checkout": gate.get("checkout"),
             "payment": gate.get("payment"),
@@ -356,6 +393,9 @@ def run_agent_turn(
 
     handled_by = agent_result.get("tool_used", "groq")
     tool_trace = agent_result.get("tool_trace", [])
+    usage = _public_usage(agent_result)
+    mode = "groq" if handled_by == "groq" else "demo_mock"
+    latency_ms = int((time.perf_counter() - started) * 1000)
     log_event(
         "agent_reply",
         user_id=uid,
@@ -364,7 +404,10 @@ def run_agent_turn(
         payload={
             "handled_by": handled_by,
             "model": settings.llm_model if handled_by == "groq" else None,
+            "mode": mode,
             "tool_trace": tool_trace,
+            "usage": usage,
+            "latency_ms": latency_ms,
             "fallback": handled_by.startswith("fallback"),
         },
     )
@@ -374,7 +417,10 @@ def run_agent_turn(
         "reply": reply,
         "handled_by": handled_by,
         "model": settings.llm_model if handled_by == "groq" else None,
+        "mode": mode,
         "tool_trace": tool_trace,
+        "usage": usage,
+        "latency_ms": latency_ms,
         "proposal": proposal_data,
         "checkout": None,
         "payment": None,
