@@ -44,6 +44,10 @@ export function fetchMeta() {
   return getJson("/api/meta");
 }
 
+export function fetchDemoCustomers() {
+  return getJson("/api/demo/customers");
+}
+
 export function sendChat(message, sessionId, userId = "demo_user_01") {
   return postJson("/api/chat", {
     message,
@@ -52,13 +56,13 @@ export function sendChat(message, sessionId, userId = "demo_user_01") {
   });
 }
 
-export function createUsualProposal(budget = 800) {
+export function createUsualProposal(budget = 800, userId = "demo_user_01") {
   return postJson("/api/proposals", {
-    user_id: "demo_user_01",
+    user_id: userId,
     use_usual: true,
     stated_budget_inr: budget,
     with_growth: true,
-    session_id: "ui_demo_user_01",
+    session_id: `ui_${userId}`,
   });
 }
 
@@ -148,12 +152,13 @@ export function confirmProposalForUser(
 export function confirmProposal(
   proposalId,
   expectedTotalInr,
-  acknowledgeImpulseWarning = false
+  acknowledgeImpulseWarning = false,
+  userId = "demo_user_01"
 ) {
   return postJson(`/api/proposals/${proposalId}/confirm`, {
     expected_total_inr: expectedTotalInr,
-    user_id: "demo_user_01",
-    idempotency_key: `ui_${proposalId}_${expectedTotalInr}`,
+    user_id: userId,
+    idempotency_key: `ui_${userId}_${proposalId}_${expectedTotalInr}`,
     acknowledge_impulse_warning: acknowledgeImpulseWarning,
   });
 }

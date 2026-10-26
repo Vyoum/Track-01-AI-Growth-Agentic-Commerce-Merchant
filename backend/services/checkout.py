@@ -898,6 +898,15 @@ def _growth_summary(proposal: Proposal) -> dict:
     }
 
 
+def _customer_name(user_id: str) -> str:
+    from backend.services.data_loader import load_demo_users
+
+    for user in load_demo_users().get("users", []):
+        if user.get("user_id") == user_id and user.get("name"):
+            return str(user["name"])
+    return "Demo Customer"
+
+
 def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
     from backend.config import get_settings
     from backend.integrations.razorpay_client import get_razorpay_client
@@ -910,7 +919,7 @@ def _checkout_payload(payment: PaymentRecord, proposal: Proposal) -> dict:
         "currency": "INR",
         "name": get_settings().merchant_name,
         "description": proposal.line_summary[:120],
-        "prefill": {"name": "Aisha Khan"},
+        "prefill": {"name": _customer_name(proposal.user_id)},
         "notes": {
             "proposal_id": proposal.id,
             "payment_id": payment.id,

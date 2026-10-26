@@ -59,7 +59,7 @@ Merchant: demo e-commerce catalog (mock first; live client API later)
 
 ## Catalog snapshot (15 products)
 
-Full SKUs live in `backend/data/mock_catalog.json`.
+Full SKUs live in `backend/data/mock_catalog.json`. The frozen 15 below are unchanged. Four extra Indian pantry and accessory SKUs (ragi cookies, haldi latte, copper bottle, cork yoga block) are in the same file for the wider customer book and do not change Scenario A.
 
 | ID | Name | Price (₹) | Category | Role in demo |
 |----|------|-----------|----------|--------------|

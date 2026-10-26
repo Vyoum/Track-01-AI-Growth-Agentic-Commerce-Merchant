@@ -4,9 +4,225 @@
       "user_id": "demo_user_01",
       "name": "Aisha Khan",
       "phone": "+91-9000000001",
-      "email": "aisha.demo@example.com",
+      "email": "aisha.khan@example.com",
+      "city": "Mumbai",
+      "signup_date": "2026-01-12",
       "preferred_budget_inr": 800,
-      "notes": "Primary buildathon demo user. 'Usual' = most recent completed order (ord_demo_003)."
+      "preferences": {
+        "diet": "high-protein",
+        "categories": ["supplements", "grocery"],
+        "language": "en",
+        "avoid": ["gift_cards", "alcohol_adjacent"]
+      },
+      "notes": "Primary buildathon demo user. 'Usual' = most recent completed order (ord_demo_003), Daily Protein Bundle ₹699."
+    },
+    {
+      "user_id": "demo_user_02",
+      "name": "Rohan Mehta",
+      "phone": "+91-9000000002",
+      "email": "rohan.mehta@example.com",
+      "city": "Bengaluru",
+      "signup_date": "2025-11-03",
+      "preferred_budget_inr": 1500,
+      "preferences": {
+        "diet": "strength-training",
+        "categories": ["supplements", "accessories"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "Creatine regular. Usual is Creatine Monohydrate; shaker is a past co-purchase."
+    },
+    {
+      "user_id": "demo_user_03",
+      "name": "Meera Iyer",
+      "phone": "+91-9000000003",
+      "email": "meera.iyer@example.com",
+      "city": "Chennai",
+      "signup_date": "2025-12-18",
+      "preferred_budget_inr": 2000,
+      "preferences": {
+        "diet": "home-practice",
+        "categories": ["fitness"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Yoga mat is the usual. Often adds the resistance band set."
+    },
+    {
+      "user_id": "demo_user_04",
+      "name": "Kabir Shah",
+      "phone": "+91-9000000004",
+      "email": "kabir.shah@example.com",
+      "city": "Pune",
+      "signup_date": "2026-02-02",
+      "preferred_budget_inr": 900,
+      "preferences": {
+        "diet": "breakfast",
+        "categories": ["grocery"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Peanut butter usual. Oats are the natural add-on."
+    },
+    {
+      "user_id": "demo_user_05",
+      "name": "Ananya Reddy",
+      "phone": "+91-9000000005",
+      "email": "ananya.reddy@example.com",
+      "city": "Hyderabad",
+      "signup_date": "2026-03-09",
+      "preferred_budget_inr": 1000,
+      "preferences": {
+        "diet": "daily-wellness",
+        "categories": ["supplements", "grocery"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "Multivitamin usual, green tea as the complement."
+    },
+    {
+      "user_id": "demo_user_06",
+      "name": "Neel Joshi",
+      "phone": "+91-9000000006",
+      "email": "neel.joshi@example.com",
+      "city": "Ahmedabad",
+      "signup_date": "2026-04-21",
+      "preferred_budget_inr": 1200,
+      "preferences": {
+        "diet": "vegetarian",
+        "categories": ["grocery"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Breakfast pair: oats and peanut butter together in the latest order."
+    },
+    {
+      "user_id": "demo_user_07",
+      "name": "Fatima Qureshi",
+      "phone": "+91-9000000007",
+      "email": "fatima.qureshi@example.com",
+      "city": "Lucknow",
+      "signup_date": "2026-01-28",
+      "preferred_budget_inr": 800,
+      "preferences": {
+        "diet": "light-wellness",
+        "categories": ["grocery", "supplements"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "Green tea usual. Multivitamin shows up in older orders."
+    },
+    {
+      "user_id": "demo_user_08",
+      "name": "Arjun Nair",
+      "phone": "+91-9000000008",
+      "email": "arjun.nair@example.com",
+      "city": "Kochi",
+      "signup_date": "2026-02-14",
+      "preferred_budget_inr": 1100,
+      "preferences": {
+        "diet": "on-the-go",
+        "categories": ["grocery", "supplements"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Protein bar box is the usual. Often shops under ₹1100."
+    },
+    {
+      "user_id": "demo_user_09",
+      "name": "Diya Kapoor",
+      "phone": "+91-9000000009",
+      "email": "diya.kapoor@example.com",
+      "city": "Jaipur",
+      "signup_date": "2026-05-06",
+      "preferred_budget_inr": 700,
+      "preferences": {
+        "diet": "breakfast",
+        "categories": ["grocery"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "Tight budget. Usual is rolled oats; peanut butter fits, the protein bundle does not."
+    },
+    {
+      "user_id": "demo_user_10",
+      "name": "Vikram Singh",
+      "phone": "+91-9000000010",
+      "email": "vikram.singh@example.com",
+      "city": "Chandigarh",
+      "signup_date": "2025-11-19",
+      "preferred_budget_inr": 2500,
+      "preferences": {
+        "diet": "home-gym",
+        "categories": ["fitness", "accessories"],
+        "language": "en",
+        "avoid": []
+      },
+      "notes": "Resistance band usual. Seeded checkouts sit near the daily spend cap so the impulse warning can be shown."
+    },
+    {
+      "user_id": "demo_user_11",
+      "name": "Sana Sheikh",
+      "phone": "+91-9000000011",
+      "email": "sana.sheikh@example.com",
+      "city": "Surat",
+      "signup_date": "2026-03-30",
+      "preferred_budget_inr": 600,
+      "preferences": {
+        "diet": "hydration",
+        "categories": ["supplements", "accessories"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Electrolyte mix usual. One seeded order is tagged as an external buyer agent."
+    },
+    {
+      "user_id": "demo_user_12",
+      "name": "Ishaan Malhotra",
+      "phone": "+91-9000000012",
+      "email": "ishaan.malhotra@example.com",
+      "city": "New Delhi",
+      "signup_date": "2026-10-20",
+      "preferred_budget_inr": 1500,
+      "preferences": {
+        "diet": "exploring",
+        "categories": ["supplements", "fitness"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "New customer with no completed orders. 'Order my usual' falls back to bestsellers."
+    },
+    {
+      "user_id": "demo_user_13",
+      "name": "Lavanya Krishnan",
+      "phone": "+91-9000000013",
+      "email": "lavanya.krishnan@example.com",
+      "city": "Coimbatore",
+      "signup_date": "2026-06-11",
+      "preferred_budget_inr": 900,
+      "preferences": {
+        "diet": "warm-breakfast",
+        "categories": ["grocery"],
+        "language": "en",
+        "avoid": ["gift_cards"]
+      },
+      "notes": "Haldi latte mix is the usual. Oats are the catalog complement."
+    },
+    {
+      "user_id": "demo_user_14",
+      "name": "Harsh Patel",
+      "phone": "+91-9000000014",
+      "email": "harsh.patel@example.com",
+      "city": "Vadodara",
+      "signup_date": "2026-04-04",
+      "preferred_budget_inr": 800,
+      "preferences": {
+        "diet": "millet-snacks",
+        "categories": ["grocery"],
+        "language": "en",
+        "avoid": ["alcohol_adjacent"]
+      },
+      "notes": "Ragi cookies usual. The seeded checkout for this customer is a cancelled payment."
     }
   ],
   "orders": [
@@ -43,6 +259,297 @@
         { "product_id": "prod_protein_bundle", "name": "Daily Protein Bundle", "qty": 1, "unit_price_inr": 699 }
       ],
       "notes": "Defines 'the usual' for Scenario A: baseline ₹699 before growth recommendation."
+    },
+    {
+      "order_id": "ord_demo_021",
+      "user_id": "demo_user_02",
+      "status": "completed",
+      "created_at": "2026-06-02T07:40:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_creatine", "name": "Creatine Monohydrate 250g", "qty": 1, "unit_price_inr": 449 },
+        { "product_id": "prod_shaker", "name": "Shaker Bottle", "qty": 1, "unit_price_inr": 99 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_022",
+      "user_id": "demo_user_02",
+      "status": "completed",
+      "created_at": "2026-07-18T19:10:00+05:30",
+      "total_inr": 449,
+      "items": [
+        { "product_id": "prod_creatine", "name": "Creatine Monohydrate 250g", "qty": 1, "unit_price_inr": 449 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_023",
+      "user_id": "demo_user_02",
+      "status": "completed",
+      "created_at": "2026-09-02T08:05:00+05:30",
+      "total_inr": 449,
+      "items": [
+        { "product_id": "prod_creatine", "name": "Creatine Monohydrate 250g", "qty": 1, "unit_price_inr": 449 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_031",
+      "user_id": "demo_user_03",
+      "status": "completed",
+      "created_at": "2026-05-20T17:25:00+05:30",
+      "total_inr": 799,
+      "items": [
+        { "product_id": "prod_yoga_mat", "name": "Yoga Mat", "qty": 1, "unit_price_inr": 799 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_032",
+      "user_id": "demo_user_03",
+      "status": "completed",
+      "created_at": "2026-08-01T11:15:00+05:30",
+      "total_inr": 1198,
+      "items": [
+        { "product_id": "prod_yoga_mat", "name": "Yoga Mat", "qty": 1, "unit_price_inr": 799 },
+        { "product_id": "prod_resistance_band", "name": "Resistance Band Set", "qty": 1, "unit_price_inr": 399 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_033",
+      "user_id": "demo_user_03",
+      "status": "completed",
+      "created_at": "2026-09-15T06:50:00+05:30",
+      "total_inr": 799,
+      "items": [
+        { "product_id": "prod_yoga_mat", "name": "Yoga Mat", "qty": 1, "unit_price_inr": 799 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_041",
+      "user_id": "demo_user_04",
+      "status": "completed",
+      "created_at": "2026-04-11T09:30:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_peanut_butter", "name": "Natural Peanut Butter 500g", "qty": 1, "unit_price_inr": 299 },
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_042",
+      "user_id": "demo_user_04",
+      "status": "completed",
+      "created_at": "2026-09-20T08:45:00+05:30",
+      "total_inr": 299,
+      "items": [
+        { "product_id": "prod_peanut_butter", "name": "Natural Peanut Butter 500g", "qty": 1, "unit_price_inr": 299 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_051",
+      "user_id": "demo_user_05",
+      "status": "completed",
+      "created_at": "2026-07-01T12:20:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_multivitamin", "name": "Daily Multivitamin 60s", "qty": 1, "unit_price_inr": 349 },
+        { "product_id": "prod_green_tea", "name": "Green Tea 100 bags", "qty": 1, "unit_price_inr": 199 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_052",
+      "user_id": "demo_user_05",
+      "status": "completed",
+      "created_at": "2026-09-28T21:05:00+05:30",
+      "total_inr": 349,
+      "items": [
+        { "product_id": "prod_multivitamin", "name": "Daily Multivitamin 60s", "qty": 1, "unit_price_inr": 349 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_061",
+      "user_id": "demo_user_06",
+      "status": "completed",
+      "created_at": "2026-08-08T07:55:00+05:30",
+      "total_inr": 249,
+      "items": [
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_062",
+      "user_id": "demo_user_06",
+      "status": "completed",
+      "created_at": "2026-10-01T08:10:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 },
+        { "product_id": "prod_peanut_butter", "name": "Natural Peanut Butter 500g", "qty": 1, "unit_price_inr": 299 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_071",
+      "user_id": "demo_user_07",
+      "status": "completed",
+      "created_at": "2026-06-22T16:40:00+05:30",
+      "total_inr": 199,
+      "items": [
+        { "product_id": "prod_green_tea", "name": "Green Tea 100 bags", "qty": 1, "unit_price_inr": 199 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_072",
+      "user_id": "demo_user_07",
+      "status": "completed",
+      "created_at": "2026-08-30T18:05:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_green_tea", "name": "Green Tea 100 bags", "qty": 1, "unit_price_inr": 199 },
+        { "product_id": "prod_multivitamin", "name": "Daily Multivitamin 60s", "qty": 1, "unit_price_inr": 349 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_073",
+      "user_id": "demo_user_07",
+      "status": "completed",
+      "created_at": "2026-09-10T09:15:00+05:30",
+      "total_inr": 199,
+      "items": [
+        { "product_id": "prod_green_tea", "name": "Green Tea 100 bags", "qty": 1, "unit_price_inr": 199 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_081",
+      "user_id": "demo_user_08",
+      "status": "completed",
+      "created_at": "2026-07-09T13:35:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_protein_bar", "name": "Protein Bar Box (6)", "qty": 1, "unit_price_inr": 299 },
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_082",
+      "user_id": "demo_user_08",
+      "status": "completed",
+      "created_at": "2026-09-22T20:20:00+05:30",
+      "total_inr": 299,
+      "items": [
+        { "product_id": "prod_protein_bar", "name": "Protein Bar Box (6)", "qty": 1, "unit_price_inr": 299 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_091",
+      "user_id": "demo_user_09",
+      "status": "completed",
+      "created_at": "2026-07-14T08:00:00+05:30",
+      "total_inr": 548,
+      "items": [
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 },
+        { "product_id": "prod_peanut_butter", "name": "Natural Peanut Butter 500g", "qty": 1, "unit_price_inr": 299 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_092",
+      "user_id": "demo_user_09",
+      "status": "completed",
+      "created_at": "2026-10-05T07:45:00+05:30",
+      "total_inr": 249,
+      "items": [
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_101",
+      "user_id": "demo_user_10",
+      "status": "completed",
+      "created_at": "2026-05-02T18:30:00+05:30",
+      "total_inr": 399,
+      "items": [
+        { "product_id": "prod_resistance_band", "name": "Resistance Band Set", "qty": 1, "unit_price_inr": 399 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_102",
+      "user_id": "demo_user_10",
+      "status": "completed",
+      "created_at": "2026-08-18T19:40:00+05:30",
+      "total_inr": 1198,
+      "items": [
+        { "product_id": "prod_resistance_band", "name": "Resistance Band Set", "qty": 1, "unit_price_inr": 399 },
+        { "product_id": "prod_yoga_mat", "name": "Yoga Mat", "qty": 1, "unit_price_inr": 799 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_103",
+      "user_id": "demo_user_10",
+      "status": "completed",
+      "created_at": "2026-09-30T17:05:00+05:30",
+      "total_inr": 399,
+      "items": [
+        { "product_id": "prod_resistance_band", "name": "Resistance Band Set", "qty": 1, "unit_price_inr": 399 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_111",
+      "user_id": "demo_user_11",
+      "status": "completed",
+      "created_at": "2026-06-15T15:10:00+05:30",
+      "total_inr": 248,
+      "items": [
+        { "product_id": "prod_electrolyte", "name": "Electrolyte Drink Mix", "qty": 1, "unit_price_inr": 149 },
+        { "product_id": "prod_shaker", "name": "Shaker Bottle", "qty": 1, "unit_price_inr": 99 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_112",
+      "user_id": "demo_user_11",
+      "status": "completed",
+      "created_at": "2026-08-19T14:25:00+05:30",
+      "total_inr": 149,
+      "items": [
+        { "product_id": "prod_electrolyte", "name": "Electrolyte Drink Mix", "qty": 1, "unit_price_inr": 149 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_131",
+      "user_id": "demo_user_13",
+      "status": "completed",
+      "created_at": "2026-08-25T07:20:00+05:30",
+      "total_inr": 249,
+      "items": [
+        { "product_id": "prod_oats", "name": "Rolled Oats 1kg", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_132",
+      "user_id": "demo_user_13",
+      "status": "completed",
+      "created_at": "2026-09-18T08:35:00+05:30",
+      "total_inr": 249,
+      "items": [
+        { "product_id": "prod_haldi_latte", "name": "Haldi Latte Mix 200g", "qty": 1, "unit_price_inr": 249 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_141",
+      "user_id": "demo_user_14",
+      "status": "completed",
+      "created_at": "2026-07-27T21:15:00+05:30",
+      "total_inr": 428,
+      "items": [
+        { "product_id": "prod_ragi_cookies", "name": "Ragi Protein Cookies (8)", "qty": 1, "unit_price_inr": 229 },
+        { "product_id": "prod_green_tea", "name": "Green Tea 100 bags", "qty": 1, "unit_price_inr": 199 }
+      ]
+    },
+    {
+      "order_id": "ord_demo_142",
+      "user_id": "demo_user_14",
+      "status": "completed",
+      "created_at": "2026-10-18T16:50:00+05:30",
+      "total_inr": 229,
+      "items": [
+        { "product_id": "prod_ragi_cookies", "name": "Ragi Protein Cookies (8)", "qty": 1, "unit_price_inr": 229 }
+      ]
     }
   ]
 }

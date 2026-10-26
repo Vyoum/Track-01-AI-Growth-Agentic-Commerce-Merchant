@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import DecisionCenter from "./DecisionCenter.jsx";
+import ModelBadge from "./ModelBadge.jsx";
 import NavBar from "./NavBar.jsx";
 import Scoreboard from "./Scoreboard.jsx";
 import {
@@ -689,6 +690,8 @@ export default function DemoPage() {
             <p className="merchant-eyebrow">Visible AI authority boundary</p>
             <h2>Groq chooses tools. Deterministic code controls money.</h2>
           </div>
+          <div className="demo-model-stack">
+          <ModelBadge llm={meta?.llm} />
           <span
             className="demo-proof-badge"
             data-state={
@@ -709,6 +712,7 @@ export default function DemoPage() {
                   ? "GROQ NOT CONFIGURED · FALLBACK READY"
                   : "CHECKING GROQ CONFIGURATION"}
           </span>
+          </div>
         </div>
 
         <div className="demo-boundary-flow">
@@ -716,8 +720,10 @@ export default function DemoPage() {
             <span>1 · LANGUAGE LAYER</span>
             <strong>
               {agentProof?.groqProved
-                ? "Groq"
-                : "Groq tool calling + explicit fallback"}
+                ? meta?.llm?.configured_model || "Groq"
+                : meta?.llm?.configured
+                  ? "Groq tool calling + explicit fallback"
+                  : "Deterministic fallback"}
             </strong>
             <p>Interprets the customer request and selects only permitted tools.</p>
             <code>
