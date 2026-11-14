@@ -9,6 +9,56 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+class MerchantAccount(BaseModel):
+    id: str
+    name: str
+    slug: str
+    email: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MerchantRegisterRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = " ".join(value.strip().split())
+        if len(normalized) < 2:
+            raise ValueError("name must contain at least 2 characters")
+        return normalized
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        local, separator, domain = normalized.partition("@")
+        if not separator or not local or "." not in domain or domain.startswith("."):
+            raise ValueError("enter a valid email address")
+        return normalized
+
+
+class MerchantLoginRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().casefold()
+
+
+class MerchantAuthResponse(BaseModel):
+    merchant: MerchantAccount
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+
+
 class ProposalStatus(str, Enum):
     DRAFT = "draft"
     AWAITING_MERCHANT_APPROVAL = "awaiting_merchant_approval"
@@ -176,6 +226,7 @@ class CampaignPolicyRequest(BaseModel):
 
 class Proposal(BaseModel):
     id: str
+    merchant_id: str = "merchant_demo"
     user_id: str
     session_id: str | None = None
     status: ProposalStatus
@@ -216,6 +267,7 @@ class AddonDecisionRequest(BaseModel):
 
 class CreateProposalRequest(BaseModel):
     user_id: str
+    merchant_id: str = Field(default="merchant_demo", min_length=3, max_length=80)
     product_ids: list[str] = Field(default_factory=list)
     quantities: dict[str, int] = Field(default_factory=dict)
     stated_budget_inr: int | None = Field(default=None, ge=1, le=5000)

@@ -212,18 +212,32 @@ def mark_payment_status(payment: PaymentRecord, status: PaymentStatus) -> Paymen
     return payment
 
 
-def get_campaign_policy(campaign_id: str) -> dict[str, Any] | None:
+def get_campaign_policy(
+    campaign_id: str,
+    merchant_id: str = "merchant_demo",
+) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
             """
-            SELECT campaign_id, status, note, updated_at
-            FROM campaign_policies WHERE campaign_id = ?
+            SELECT merchant_id, campaign_id, status, note, updated_at
+            FROM merchant_campaign_policies
+            WHERE merchant_id = ? AND campaign_id = ?
             """,
-            (campaign_id,),
+            (merchant_id, campaign_id),
         ).fetchone()
+        if row is None and merchant_id == "merchant_demo":
+            row = conn.execute(
+                """
+                SELECT 'merchant_demo' AS merchant_id,
+                       campaign_id, status, note, updated_at
+                FROM campaign_policies WHERE campaign_id = ?
+                """,
+                (campaign_id,),
+            ).fetchone()
     if not row:
         return None
     return {
+        "merchant_id": row["merchant_id"],
         "campaign_id": row["campaign_id"],
         "status": row["status"],
         "note": row["note"],
@@ -231,13 +245,28 @@ def get_campaign_policy(campaign_id: str) -> dict[str, Any] | None:
     }
 
 
-def list_campaign_policies() -> dict[str, dict[str, Any]]:
+def list_campaign_policies(
+    merchant_id: str = "merchant_demo",
+) -> dict[str, dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT campaign_id, status, note, updated_at FROM campaign_policies"
+            """
+            SELECT merchant_id, campaign_id, status, note, updated_at
+            FROM merchant_campaign_policies WHERE merchant_id = ?
+            """,
+            (merchant_id,),
         ).fetchall()
+        if not rows and merchant_id == "merchant_demo":
+            rows = conn.execute(
+                """
+                SELECT 'merchant_demo' AS merchant_id,
+                       campaign_id, status, note, updated_at
+                FROM campaign_policies
+                """
+            ).fetchall()
     return {
         row["campaign_id"]: {
+            "merchant_id": row["merchant_id"],
             "campaign_id": row["campaign_id"],
             "status": row["status"],
             "note": row["note"],
@@ -251,22 +280,25 @@ def set_campaign_policy(
     campaign_id: str,
     status: str,
     note: str | None = None,
+    merchant_id: str = "merchant_demo",
 ) -> dict[str, Any]:
     now = _now().isoformat()
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO campaign_policies (campaign_id, status, note, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(campaign_id) DO UPDATE SET
+            INSERT INTO merchant_campaign_policies (
+                merchant_id, campaign_id, status, note, updated_at
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(merchant_id, campaign_id) DO UPDATE SET
                 status=excluded.status,
                 note=excluded.note,
                 updated_at=excluded.updated_at
             """,
-            (campaign_id, status, note, now),
+            (merchant_id, campaign_id, status, note, now),
         )
         conn.commit()
     return {
+        "merchant_id": merchant_id,
         "campaign_id": campaign_id,
         "status": status,
         "note": note,
@@ -274,11 +306,14 @@ def set_campaign_policy(
     }
 
 
-def is_campaign_template_enabled(campaign_id: str) -> bool:
+def is_campaign_template_enabled(
+    campaign_id: str,
+    merchant_id: str = "merchant_demo",
+) -> bool:
     """True when the merchant has enabled this template (or JSON default is on)."""
     from backend.services.data_loader import load_campaigns
 
-    stored = get_campaign_policy(campaign_id)
+    stored = get_campaign_policy(campaign_id, merchant_id=merchant_id)
     if stored:
         return stored["status"] == "enabled"
 

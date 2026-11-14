@@ -41,6 +41,19 @@ class DemoEndpointTests(unittest.TestCase):
         reload_demo_data()
         init_db()
         self.client = TestClient(app)
+        auth = self.client.post(
+            "/api/merchant/auth/register",
+            json={
+                "name": "Demo Merchant",
+                "email": "merchant@example.com",
+                "password": "correct-horse-123",
+            },
+        )
+        self.assertEqual(auth.status_code, 201, auth.text)
+        self.merchant_headers = {
+            "Authorization": f"Bearer {auth.json()['access_token']}"
+        }
+        self.merchant_id = auth.json()["merchant"]["id"]
 
     def tearDown(self) -> None:
         self.client.close()
@@ -260,6 +273,7 @@ class DemoEndpointTests(unittest.TestCase):
         created = self.client.post(
             "/api/proposals",
             json={
+                "merchant_id": self.merchant_id,
                 "user_id": "demo_user_01",
                 "use_usual": True,
                 "stated_budget_inr": 800,
@@ -273,13 +287,17 @@ class DemoEndpointTests(unittest.TestCase):
             body["campaign_decision"]["approval_mode"],
             "template_policy",
         )
-        pending = self.client.get("/api/merchant/campaigns/pending").json()
+        pending = self.client.get(
+            "/api/merchant/campaigns/pending",
+            headers=self.merchant_headers,
+        ).json()
         self.assertEqual(pending["count"], 0)
 
     def test_paused_template_hides_addon_without_a_merchant_queue(self) -> None:
         first = self.client.post(
             "/api/proposals",
             json={
+                "merchant_id": self.merchant_id,
                 "user_id": "demo_user_01",
                 "use_usual": True,
                 "stated_budget_inr": 800,
@@ -290,6 +308,7 @@ class DemoEndpointTests(unittest.TestCase):
         paused = self.client.post(
             f"/api/merchant/campaigns/{campaign_id}/policy",
             json={"status": "paused", "note": "test pause"},
+            headers=self.merchant_headers,
         )
         self.assertEqual(paused.status_code, 200, paused.text)
         self.assertGreaterEqual(paused.json().get("offers_retracted", 0), 1)
@@ -301,6 +320,7 @@ class DemoEndpointTests(unittest.TestCase):
         second = self.client.post(
             "/api/proposals",
             json={
+                "merchant_id": self.merchant_id,
                 "user_id": "demo_user_01",
                 "use_usual": True,
                 "stated_budget_inr": 800,
@@ -313,7 +333,10 @@ class DemoEndpointTests(unittest.TestCase):
             (second.get("campaign_decision") or {}).get("merchant_approval_status"),
             "paused",
         )
-        pending = self.client.get("/api/merchant/campaigns/pending").json()
+        pending = self.client.get(
+            "/api/merchant/campaigns/pending",
+            headers=self.merchant_headers,
+        ).json()
         self.assertEqual(pending["count"], 0)
 
 

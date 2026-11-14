@@ -31,6 +31,12 @@ class Settings(BaseSettings):
         default="http://localhost:5173,http://127.0.0.1:5173",
         alias="CORS_ORIGINS",
     )
+    merchant_session_ttl_hours: int = Field(
+        default=168,
+        ge=1,
+        le=24 * 90,
+        alias="MERCHANT_SESSION_TTL_HOURS",
+    )
 
     demo_user_id: str = Field(default="demo_user_01", alias="DEMO_USER_ID")
     use_mock_catalog: bool = Field(default=True, alias="USE_MOCK_CATALOG")

@@ -1,17 +1,21 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-async function getJson(path) {
-  const res = await fetch(`${API_BASE}${path}`);
+async function getJson(path, headers = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers,
+    credentials: "include",
+  });
   if (!res.ok) {
     throw new Error(`Request failed: ${path} (${res.status})`);
   }
   return res.json();
 }
 
-async function postJson(path, body) {
+async function postJson(path, body, headers = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
+    credentials: "include",
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -20,6 +24,34 @@ async function postJson(path, body) {
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return data;
+}
+
+function merchantHeaders() {
+  return {};
+}
+
+function merchantGetJson(path) {
+  return getJson(path, merchantHeaders());
+}
+
+function merchantPostJson(path, body = {}) {
+  return postJson(path, body, merchantHeaders());
+}
+
+export function registerMerchant(name, email, password) {
+  return postJson("/api/merchant/auth/register", { name, email, password });
+}
+
+export function loginMerchant(email, password) {
+  return postJson("/api/merchant/auth/login", { email, password });
+}
+
+export function fetchMerchantAccount() {
+  return merchantGetJson("/api/merchant/account");
+}
+
+export async function logoutMerchant() {
+  return merchantPostJson("/api/merchant/auth/logout");
 }
 
 export async function inspectApiRequest(path, options = {}) {
@@ -70,22 +102,22 @@ export function decideAddon(proposalId, decision, productId) {
 }
 
 export function decideCampaign(proposalId, decision, note) {
-  return postJson(`/api/proposals/${proposalId}/campaign/decide`, {
+  return merchantPostJson(`/api/proposals/${proposalId}/campaign/decide`, {
     decision,
     note: note || undefined,
   });
 }
 
 export function fetchPendingCampaigns() {
-  return getJson("/api/merchant/campaigns/pending");
+  return merchantGetJson("/api/merchant/campaigns/pending");
 }
 
 export function fetchCampaignCatalog() {
-  return getJson("/api/merchant/campaigns/catalog");
+  return merchantGetJson("/api/merchant/campaigns/catalog");
 }
 
 export function setCampaignPolicy(campaignId, status, note) {
-  return postJson(`/api/merchant/campaigns/${campaignId}/policy`, {
+  return merchantPostJson(`/api/merchant/campaigns/${campaignId}/policy`, {
     status,
     note: note || undefined,
   });

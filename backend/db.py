@@ -61,6 +61,46 @@ CREATE TABLE IF NOT EXISTS campaign_policies (
     updated_at TEXT NOT NULL
 );
 
+-- Merchant identity is intentionally separate from buyer/customer identity.
+-- Passwords and session tokens are never stored in plaintext.
+CREATE TABLE IF NOT EXISTS merchants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS merchant_sessions (
+    token_hash TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_used_at TEXT NOT NULL,
+    revoked_at TEXT,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_merchant_sessions_merchant_id
+ON merchant_sessions(merchant_id);
+CREATE INDEX IF NOT EXISTS ix_merchant_sessions_expires_at
+ON merchant_sessions(expires_at);
+
+-- Campaign state is tenant-scoped. The older campaign_policies table remains
+-- readable for the built-in demo tenant during migration.
+CREATE TABLE IF NOT EXISTS merchant_campaign_policies (
+    merchant_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (merchant_id, campaign_id),
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id) ON DELETE CASCADE
+);
+
 -- Persistent agent spend caps (session / day / month). spent_so_far moves
 -- only after signature-verified payment. reserved_inr is a CAS hold taken
 -- at confirm so two carts cannot both spend the same remaining room.
@@ -103,6 +143,7 @@ def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(path, timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
     finally:
@@ -117,12 +158,29 @@ def _migrate_spend_mandate_columns(conn: sqlite3.Connection) -> None:
         )
 
 
+def _ensure_demo_merchant(conn: sqlite3.Connection) -> None:
+    """Compatibility tenant for existing demo proposals and policy state."""
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO merchants (
+            id, name, slug, email, password_hash, password_salt,
+            status, created_at, updated_at
+        ) VALUES (
+            'merchant_demo', 'Demo Fitness Store', 'demo-fitness-store',
+            'demo-system@invalid.local', 'disabled', 'disabled',
+            'system', '1970-01-01T00:00:00+00:00', '1970-01-01T00:00:00+00:00'
+        )
+        """
+    )
+
+
 def init_db(db_path: Path | None = None) -> Path:
     settings = get_settings()
     path = db_path or settings.sqlite_path
     path.parent.mkdir(parents=True, exist_ok=True)
     with connect(path) as conn:
         conn.executescript(SCHEMA)
+        _ensure_demo_merchant(conn)
         _migrate_spend_mandate_columns(conn)
         conn.commit()
     return path

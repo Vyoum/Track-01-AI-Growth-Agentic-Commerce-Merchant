@@ -111,6 +111,7 @@ def orchestrate_campaign(
     proposal_source: str = "completed_order_history",
     source_reason: str | None = None,
     has_order_history: bool | None = None,
+    merchant_id: str = "merchant_demo",
 ) -> CampaignOrchestrationResult:
     """
     Run growth ranker → detect opportunities → match campaigns.json → guardrails.
@@ -172,7 +173,11 @@ def orchestrate_campaign(
     from backend.services import store
 
     camp_id = str(camp.get("id") or "")
-    template_enabled = store.is_campaign_template_enabled(camp_id) if camp_id else False
+    template_enabled = (
+        store.is_campaign_template_enabled(camp_id, merchant_id=merchant_id)
+        if camp_id
+        else False
+    )
     if not template_enabled:
         skipped.append(
             f"best matching template {camp_id} is paused — add-on held for merchant"

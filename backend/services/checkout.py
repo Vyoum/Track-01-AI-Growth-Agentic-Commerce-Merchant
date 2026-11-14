@@ -62,6 +62,7 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
         proposal_source=proposal.proposal_source,
         source_reason=proposal.source_reason,
         has_order_history=has_history,
+        merchant_id=proposal.merchant_id,
     )
     result = orchestration.growth
     proposal.baseline_total_inr = proposal.total_inr
@@ -71,7 +72,10 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
         proposal.growth_offer = result.offer
         proposal.campaign_decision = orchestration.decision
         campaign_id = orchestration.decision.campaign_id
-        template_on = store.is_campaign_template_enabled(campaign_id)
+        template_on = store.is_campaign_template_enabled(
+            campaign_id,
+            merchant_id=proposal.merchant_id,
+        )
         if template_on:
             now = _now()
             camp = orchestration.decision
@@ -179,9 +183,15 @@ def _attach_growth(proposal: Proposal) -> tuple[Proposal, GrowthDecisionResult]:
 def decide_merchant_campaign(
     proposal_id: str,
     body: MerchantApprovalRequest,
+    authorized_merchant_id: str | None = None,
 ) -> Proposal:
     """Merchant desk gate — distinct from customer addon accept/skip."""
     proposal = get_proposal(proposal_id)
+    if (
+        authorized_merchant_id is not None
+        and proposal.merchant_id != authorized_merchant_id
+    ):
+        raise HTTPException(status_code=403, detail="Proposal belongs to another merchant")
     decision = (body.decision or "").strip().lower()
     if decision not in {"approve", "reject"}:
         raise HTTPException(status_code=400, detail="decision must be 'approve' or 'reject'")
@@ -252,6 +262,7 @@ def decide_merchant_campaign(
         camp.campaign_id,
         "enabled",
         note=body.note or "Enabled by approving a leftover checkout",
+        merchant_id=proposal.merchant_id,
     )
     log_event(
         "campaign_merchant_approved",
@@ -285,14 +296,24 @@ def decide_merchant_campaign(
     return proposal
 
 
-def list_pending_merchant_approvals(limit: int = 50) -> list[Proposal]:
+def list_pending_merchant_approvals(
+    limit: int = 50,
+    merchant_id: str | None = None,
+) -> list[Proposal]:
     """Return leftover per-checkout approvals (newest first)."""
-    return store.list_proposals_by_status(
-        ProposalStatus.AWAITING_MERCHANT_APPROVAL, limit=limit
+    proposals = store.list_proposals_by_status(
+        ProposalStatus.AWAITING_MERCHANT_APPROVAL,
+        limit=max(limit, 200) if merchant_id else limit,
     )
+    if merchant_id is not None:
+        proposals = [p for p in proposals if p.merchant_id == merchant_id]
+    return proposals[:limit]
 
 
-def _retract_open_offers_for_template(campaign_id: str) -> int:
+def _retract_open_offers_for_template(
+    campaign_id: str,
+    merchant_id: str,
+) -> int:
     """Clear add-ons already sitting on open checkouts for a paused template."""
     retracted = 0
     for status in (
@@ -300,6 +321,8 @@ def _retract_open_offers_for_template(campaign_id: str) -> int:
         ProposalStatus.AWAITING_MERCHANT_APPROVAL,
     ):
         for proposal in store.list_proposals_by_status(status, limit=200):
+            if proposal.merchant_id != merchant_id:
+                continue
             camp = proposal.campaign_decision
             if not camp or camp.campaign_id != campaign_id:
                 continue
@@ -326,7 +349,11 @@ def _retract_open_offers_for_template(campaign_id: str) -> int:
     return retracted
 
 
-def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) -> dict:
+def set_campaign_template_policy(
+    campaign_id: str,
+    body: CampaignPolicyRequest,
+    merchant_id: str = "merchant_demo",
+) -> dict:
     """Enable or pause a growth template. Runtime uses this instead of per-cart clicks."""
     status = (body.status or "").strip().lower()
     if status not in {"enabled", "paused"}:
@@ -340,11 +367,17 @@ def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) 
     if campaign_id not in campaigns:
         raise HTTPException(status_code=404, detail="Unknown campaign template")
 
-    policy = store.set_campaign_policy(campaign_id, status, note=body.note)
+    policy = store.set_campaign_policy(
+        campaign_id,
+        status,
+        note=body.note,
+        merchant_id=merchant_id,
+    )
     log_event(
         "campaign_template_policy_updated",
         payload={
             "campaign_id": campaign_id,
+            "merchant_id": merchant_id,
             "status": status,
             "note": body.note,
         },
@@ -353,7 +386,10 @@ def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) 
     released = 0
     retracted = 0
     if status == "enabled":
-        for proposal in list_pending_merchant_approvals(limit=100):
+        for proposal in list_pending_merchant_approvals(
+            limit=100,
+            merchant_id=merchant_id,
+        ):
             camp = proposal.campaign_decision
             if camp and camp.campaign_id == campaign_id:
                 decide_merchant_campaign(
@@ -362,7 +398,7 @@ def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) 
                 )
                 released += 1
     else:
-        retracted = _retract_open_offers_for_template(campaign_id)
+        retracted = _retract_open_offers_for_template(campaign_id, merchant_id)
 
     return {
         "policy": policy,
@@ -377,9 +413,9 @@ def set_campaign_template_policy(campaign_id: str, body: CampaignPolicyRequest) 
     }
 
 
-def merchant_campaign_catalog() -> dict:
+def merchant_campaign_catalog(merchant_id: str = "merchant_demo") -> dict:
     cfg = load_campaigns()
-    stored = store.list_campaign_policies()
+    stored = store.list_campaign_policies(merchant_id=merchant_id)
     campaigns = []
     seen_ids: set[str] = set()
     for campaign in cfg.get("campaigns", []):
@@ -658,6 +694,7 @@ def create_proposal(req: CreateProposalRequest) -> Proposal:
     now = _now()
     proposal = Proposal(
         id=f"prop_{uuid.uuid4().hex[:12]}",
+        merchant_id=req.merchant_id,
         user_id=req.user_id,
         session_id=req.session_id,
         status=ProposalStatus.AWAITING_CONFIRMATION,

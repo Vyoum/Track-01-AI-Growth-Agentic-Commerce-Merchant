@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from backend.api.auth import require_merchant
 
 from backend.models import (
     AddonDecisionRequest,
@@ -10,6 +12,7 @@ from backend.models import (
     CreateProposalRequest,
     FailPaymentRequest,
     MerchantApprovalRequest,
+    MerchantAccount,
     CampaignPolicyRequest,
     SearchProductsResponse,
     VerifyPaymentRequest,
@@ -66,8 +69,14 @@ def api_decide_addon_alias(proposal_id: str, body: AddonDecisionRequest):
 
 
 @router.get("/merchant/campaigns/pending")
-def api_pending_campaigns(limit: int = Query(default=20, ge=1, le=100)):
-    proposals = checkout.list_pending_merchant_approvals(limit=limit)
+def api_pending_campaigns(
+    limit: int = Query(default=20, ge=1, le=100),
+    _merchant: MerchantAccount = Depends(require_merchant),
+):
+    proposals = checkout.list_pending_merchant_approvals(
+        limit=limit,
+        merchant_id=_merchant.id,
+    )
     return {
         "count": len(proposals),
         "proposals": [p.model_dump(mode="json") for p in proposals],
@@ -75,18 +84,36 @@ def api_pending_campaigns(limit: int = Query(default=20, ge=1, le=100)):
 
 
 @router.get("/merchant/campaigns/catalog")
-def api_campaign_catalog():
-    return checkout.merchant_campaign_catalog()
+def api_campaign_catalog(
+    _merchant: MerchantAccount = Depends(require_merchant),
+):
+    return checkout.merchant_campaign_catalog(merchant_id=_merchant.id)
 
 
 @router.post("/merchant/campaigns/{campaign_id}/policy")
-def api_campaign_policy(campaign_id: str, body: CampaignPolicyRequest):
-    return checkout.set_campaign_template_policy(campaign_id, body)
+def api_campaign_policy(
+    campaign_id: str,
+    body: CampaignPolicyRequest,
+    _merchant: MerchantAccount = Depends(require_merchant),
+):
+    return checkout.set_campaign_template_policy(
+        campaign_id,
+        body,
+        merchant_id=_merchant.id,
+    )
 
 
 @router.post("/proposals/{proposal_id}/campaign/decide")
-def api_decide_campaign(proposal_id: str, body: MerchantApprovalRequest):
-    return checkout.decide_merchant_campaign(proposal_id, body)
+def api_decide_campaign(
+    proposal_id: str,
+    body: MerchantApprovalRequest,
+    _merchant: MerchantAccount = Depends(require_merchant),
+):
+    return checkout.decide_merchant_campaign(
+        proposal_id,
+        body,
+        authorized_merchant_id=_merchant.id,
+    )
 
 
 @router.post("/proposals/{proposal_id}/confirm")

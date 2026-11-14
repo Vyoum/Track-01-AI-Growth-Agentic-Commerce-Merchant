@@ -19,6 +19,7 @@ This project targets the official Track 01 bar: grow merchant revenue or make th
 - [Why this is agentic](#why-this-is-agentic)
 - [Architecture](#architecture)
 - [Trust and authority boundaries](#trust-and-authority-boundaries)
+- [Merchant identity and access](#merchant-identity-and-access)
 - [Human checkout flow](#human-checkout-flow)
 - [Buyer-agent flow](#buyer-agent-flow)
 - [Proposal and payment state machine](#proposal-and-payment-state-machine)
@@ -257,6 +258,23 @@ flowchart TB
 ```
 
 Nothing supplied by the browser or LLM is trusted as a price. A client can request a product ID, but the server resolves the current catalog price and stock before constructing the proposal.
+
+---
+
+## Merchant identity and access
+
+The Merchant page has a separate account boundary from buyer/customer checkout. A
+merchant can register or sign in at `/merchant`; campaign administration routes reject
+anonymous requests. Browser sessions use an expiring HttpOnly, SameSite cookie. API
+clients may send the returned token as `Authorization: Bearer ...`.
+
+Passwords are salted and hashed with `scrypt`. Raw passwords and raw session tokens are
+never stored. Only a SHA-256 digest of each session token is persisted, and logout revokes
+the server-side session. Campaign policy state and pending approvals are scoped to the
+authenticated merchant ID so one merchant cannot change another merchant's policy.
+
+Catalog connection remains the next productization milestone. Until a merchant connects a
+store, the application still uses the configured mock, Supabase, or REST data source.
 
 ---
 
@@ -635,6 +653,7 @@ npm run dev
 
 - Judge Mode: http://127.0.0.1:5173/demo
 - Customer checkout: http://127.0.0.1:5173
+- Merchant account and controls: http://127.0.0.1:5173/merchant
 - API documentation: http://127.0.0.1:8000/docs
 - Health check: http://127.0.0.1:8000/health
 - Agent manifest: http://127.0.0.1:8000/.well-known/agent-catalog.json
@@ -650,6 +669,7 @@ npm run dev
 | `APP_ENV` | Environment label | `development` |
 | `DATABASE_URL` | SQLite URL | `sqlite:///backend/data/checkout_agent.db` |
 | `CORS_ORIGINS` | Allowed frontend origins | Local Vite origins |
+| `MERCHANT_SESSION_TTL_HOURS` | Merchant login lifetime | `168` (7 days) |
 | `DEMO_USER_ID` | Customer used by demo shortcuts | `demo_user_01` in mock mode |
 | `GROQ_API_KEY` | Enables full conversational tool calling | Secret, backend only |
 | `LLM_MODEL` | Groq model identifier | `openai/gpt-oss-120b` |
@@ -810,6 +830,17 @@ Confirmation example:
 The example total must be replaced with the current stored proposal total in live mode.
 
 ### Merchant campaign policy
+
+These endpoints require an authenticated merchant session. Browser clients use the
+HttpOnly session cookie; API clients can use the bearer token returned by register/login.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/merchant/auth/register` | Create a merchant account and session |
+| `POST` | `/api/merchant/auth/login` | Authenticate and create a session |
+| `GET` | `/api/merchant/account` | Read the current merchant account |
+| `POST` | `/api/merchant/auth/logout` | Revoke the current session |
+| `POST` | `/api/merchant/auth/logout-all` | Revoke every session for the merchant |
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -1046,14 +1077,14 @@ A failed, expired, cancelled, or paid proposal is terminal. The system does not 
 This is a Buildathon demonstration, not a production payment platform.
 
 - Razorpay is restricted to test mode; mock verification is available for local demonstrations.
-- The HTTP API has no customer authentication, merchant authorization, rate limiting, or multi-tenant isolation. Do not expose it publicly as a production service without adding those controls.
+- Merchant registration, login, session revocation, protected administration routes, and tenant-scoped campaign policy are implemented. Customer authentication, login throttling, email verification, password reset, and tenant-scoped catalog credentials are not yet implemented.
 - SQLite is appropriate for a single-process demo, not horizontally scaled payment workloads.
 - The public manifest still documents `proposal-confirm-v1`. A2A checkout uses an **ACP-shaped adapter** (`API-Version: 2026-04-17`, `/checkout_sessions`). That is not ChatGPT Instant Checkout, not an OpenAI partnership, and not Stripe Shared Payment Tokens. Demo complete uses `spt_demo_*` tokens that settle through the existing confirm+verify path.
 - The independent buyer is an autonomous deterministic policy agent. Groq is used in the human conversational channel, not in the buyer’s product scorer.
 - Growth recommendations use merchant relationships, history, and popularity heuristics rather than a trained recommender model.
 - Synthetic replay measures pipeline behaviour and simulated outcomes, not real merchant conversion lift.
 - Inventory is validated while building and accepting the proposal, but there is no production inventory reservation/fulfilment workflow.
-- There is no refund, webhook reconciliation, authentication, OTP, tax, shipping, or production order-management implementation.
+- There is no refund, webhook reconciliation, customer OTP, tax, shipping, or production order-management implementation.
 - Failed payment proposals are terminal; the customer must create a new proposal to retry.
 
 These boundaries are intentional so the demo can focus on the Track 01 problem: explainable growth and end-to-end agentic checkout without giving an LLM uncontrolled authority over money.

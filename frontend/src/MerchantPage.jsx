@@ -4,8 +4,12 @@ import {
   decideCampaign,
   fetchCampaignCatalog,
   fetchHealth,
+  fetchMerchantAccount,
   fetchMeta,
   fetchPendingCampaigns,
+  loginMerchant,
+  logoutMerchant,
+  registerMerchant,
   setCampaignPolicy,
 } from "./api.js";
 
@@ -170,19 +174,23 @@ export default function MerchantPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
 
-  const refresh = useCallback(async () => {
+  const refreshAdmin = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [m, h, pendingRes, catalogRes] = await Promise.all([
-        fetchMeta(),
-        fetchHealth(),
+      const [pendingRes, catalogRes] = await Promise.all([
         fetchPendingCampaigns(),
         fetchCampaignCatalog(),
       ]);
-      setMeta(m);
-      setHealth(h);
       setPending(pendingRes.proposals || []);
       setCatalog(catalogRes);
     } catch (err) {
@@ -193,10 +201,67 @@ export default function MerchantPage() {
   }, []);
 
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 8000);
+    Promise.all([fetchMeta(), fetchHealth()])
+      .then(([m, h]) => {
+        setMeta(m);
+        setHealth(h);
+      })
+      .catch((err) => setError(err.message || "Backend unavailable"));
+
+    fetchMerchantAccount()
+      .then((merchant) => {
+        setAccount(merchant);
+        return refreshAdmin();
+      })
+      .catch(() => {
+        setAccount(null);
+        setLoading(false);
+      });
+  }, [refreshAdmin]);
+
+  useEffect(() => {
+    if (!account) return undefined;
+    const id = setInterval(refreshAdmin, 8000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [account, refreshAdmin]);
+
+  async function onAuthenticate(event) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setError("");
+    try {
+      const result =
+        authMode === "register"
+          ? await registerMerchant(
+              authForm.name,
+              authForm.email,
+              authForm.password
+            )
+          : await loginMerchant(authForm.email, authForm.password);
+      setAccount(result.merchant);
+      setAuthForm({ name: "", email: "", password: "" });
+      await refreshAdmin();
+    } catch (err) {
+      setError(err.message || "Authentication failed");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function onLogout() {
+    setAuthBusy(true);
+    try {
+      await logoutMerchant();
+    } catch {
+      // Clear local account state even if the server is temporarily unavailable.
+    } finally {
+      setAccount(null);
+      setPending([]);
+      setCatalog(null);
+      setMessage("");
+      setAuthBusy(false);
+    }
+  }
 
   async function onPolicy(campaignId, status) {
     setBusyId(campaignId);
@@ -215,7 +280,7 @@ export default function MerchantPage() {
           ? `Enabled ${campaignId}. Matching checkouts will auto-release this add-on.`
           : `Paused ${campaignId}. This add-on will not be shown. Place a new order (or refresh checkout) to see the stall.`) + extra
       );
-      await refresh();
+      await refreshAdmin();
     } catch (err) {
       setMessage(err.message);
     } finally {
@@ -233,7 +298,7 @@ export default function MerchantPage() {
           ? `Approved leftover checkout ${updated.campaign_decision?.campaign_id || proposalId} and enabled the template.`
           : `Rejected leftover checkout. Baseline cart only.`
       );
-      await refresh();
+      await refreshAdmin();
     } catch (err) {
       setMessage(err.message);
     } finally {
@@ -263,9 +328,29 @@ export default function MerchantPage() {
           </p>
         </div>
         <div className="merchant-header-actions">
-          <button type="button" className="ghost" onClick={refresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
+          {account && (
+            <>
+              <span className="merchant-account-label">
+                {account.name} · {account.email}
+              </span>
+              <button
+                type="button"
+                className="ghost"
+                onClick={refreshAdmin}
+                disabled={loading}
+              >
+                {loading ? "Refreshing…" : "Refresh"}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={onLogout}
+                disabled={authBusy}
+              >
+                Log out
+              </button>
+            </>
+          )}
           <div className="status-pill" data-ok={health?.status === "ok"}>
             {health?.status === "ok"
               ? meta?.features?.campaigns
@@ -281,7 +366,97 @@ export default function MerchantPage() {
       {message && <p className="msg merchant-toast">{message}</p>}
       {error && <p className="msg merchant-toast error">{error}</p>}
 
-      {pending.length > 0 && (
+      {!account && (
+        <section className="panel merchant-auth-panel">
+          <div>
+            <p className="merchant-eyebrow">Merchant account</p>
+            <h2>
+              {authMode === "register" ? "Create your store account" : "Sign in"}
+            </h2>
+            <p className="muted">
+              Campaign and store controls are available only to authenticated
+              merchants. Buyer checkout APIs remain separate.
+            </p>
+          </div>
+          <form className="merchant-auth-form" onSubmit={onAuthenticate}>
+            {authMode === "register" && (
+              <label>
+                Store name
+                <input
+                  value={authForm.name}
+                  onChange={(event) =>
+                    setAuthForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  minLength={2}
+                  maxLength={120}
+                  autoComplete="organization"
+                  required
+                />
+              </label>
+            )}
+            <label>
+              Email
+              <input
+                type="email"
+                value={authForm.email}
+                onChange={(event) =>
+                  setAuthForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                autoComplete="email"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={authForm.password}
+                onChange={(event) =>
+                  setAuthForm((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))
+                }
+                minLength={authMode === "register" ? 10 : 1}
+                maxLength={128}
+                autoComplete={
+                  authMode === "register" ? "new-password" : "current-password"
+                }
+                required
+              />
+            </label>
+            <button type="submit" disabled={authBusy}>
+              {authBusy
+                ? "Please wait…"
+                : authMode === "register"
+                  ? "Create account"
+                  : "Sign in"}
+            </button>
+          </form>
+          <button
+            type="button"
+            className="merchant-auth-switch"
+            onClick={() => {
+              setAuthMode((current) =>
+                current === "login" ? "register" : "login"
+              );
+              setError("");
+            }}
+          >
+            {authMode === "login"
+              ? "New merchant? Create an account"
+              : "Already have an account? Sign in"}
+          </button>
+        </section>
+      )}
+
+      {account && pending.length > 0 && (
         <section className="merchant-section">
           <div className="merchant-section-head">
             <h2>Leftover per-checkout reviews</h2>
@@ -300,7 +475,7 @@ export default function MerchantPage() {
         </section>
       )}
 
-      <section className="merchant-section">
+      {account && <section className="merchant-section">
         <div className="merchant-section-head">
           <h2>Growth templates</h2>
           <span className="merchant-count">{campaigns.length}</span>
@@ -328,7 +503,7 @@ export default function MerchantPage() {
             />
           ))}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
