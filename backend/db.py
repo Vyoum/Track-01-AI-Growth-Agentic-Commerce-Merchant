@@ -27,6 +27,19 @@ CREATE TABLE IF NOT EXISTS conversations (
     state_json TEXT NOT NULL DEFAULT '{}'
 );
 
+-- Mirror of demo_users.json so a seeded SQLite file is self-contained.
+CREATE TABLE IF NOT EXISTS customers (
+    user_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    city TEXT,
+    signup_date TEXT,
+    preferred_budget_inr INTEGER,
+    preferences_json TEXT NOT NULL DEFAULT '{}',
+    notes TEXT
+);
+
 CREATE TABLE IF NOT EXISTS proposals (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

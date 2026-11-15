@@ -3,7 +3,8 @@ import ChatWindow from "./ChatWindow.jsx";
 import DecisionCenter from "./DecisionCenter.jsx";
 import NavBar from "./NavBar.jsx";
 import OrderSummaryCard from "./OrderSummaryCard.jsx";
-import { fetchMeta, fetchHealth, fetchProposal, fetchProposalAudit } from "./api.js";
+import { fetchMeta, fetchHealth, fetchProposal, fetchProposalAudit, fetchDemoCustomers } from "./api.js";
+import ModelBadge from "./ModelBadge.jsx";
 
 export default function App() {
   const [meta, setMeta] = useState(null);
@@ -16,6 +17,10 @@ export default function App() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [lastUserRequest, setLastUserRequest] = useState(
     'Order my usual, under ₹800'
+  );
+  const [customers, setCustomers] = useState([]);
+  const [userId, setUserId] = useState(
+    () => window.localStorage.getItem("atelier_demo_user") || ""
   );
 
   const loadAudit = useCallback(async (proposalId) => {
@@ -32,13 +37,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchMeta(), fetchHealth()])
-      .then(([m, h]) => {
+    Promise.all([fetchMeta(), fetchHealth(), fetchDemoCustomers()])
+      .then(([m, h, book]) => {
         setMeta(m);
         setHealth(h);
+        const list = book.customers || [];
+        setCustomers(list);
+        setUserId((current) => {
+          if (current && list.some((c) => c.user_id === current)) return current;
+          return book.demo_user_id || list[0]?.user_id || "demo_user_01";
+        });
       })
       .catch((err) => setError(err.message || "Backend unreachable"));
   }, []);
+
+  const customer = customers.find((c) => c.user_id === userId) || null;
+  const budget = customer?.preferred_budget_inr || 800;
+
+  function selectCustomer(nextId) {
+    setUserId(nextId);
+    window.localStorage.setItem("atelier_demo_user", nextId);
+    setProposal(null);
+    setSessionId(null);
+    setCheckoutResult(null);
+    setAudit(null);
+    const next = customers.find((c) => c.user_id === nextId);
+    const nextBudget = next?.preferred_budget_inr || 800;
+    setLastUserRequest(
+      next?.completed_orders
+        ? `Order my usual, under ₹${nextBudget}`
+        : `I'm new here, something good under ₹${nextBudget}`
+    );
+  }
 
   useEffect(() => {
     if (proposal?.id) {
@@ -92,14 +122,44 @@ export default function App() {
               "Speak an order. One optional add-on. Razorpay test checkout — never a second charge."}
           </p>
         </div>
-        <div className="status-pill" data-ok={health?.status === "ok"}>
-          {health?.status === "ok"
-            ? meta?.features?.agent
-              ? "Agent online (Groq)"
-              : "API online"
-            : error || "Checking API…"}
+        <div className="header-status">
+          <div className="status-pill" data-ok={health?.status === "ok"}>
+            {health?.status === "ok"
+              ? meta?.features?.agent
+                ? "Agent online (Groq)"
+                : "API online · demo fallback"
+              : error || "Checking API…"}
+          </div>
+          <ModelBadge llm={meta?.llm} />
         </div>
       </header>
+
+      <div className="customer-switch">
+        <label>
+          <span>Demo customer</span>
+          <select
+            value={userId}
+            onChange={(e) => selectCustomer(e.target.value)}
+            disabled={!customers.length}
+          >
+            {customers.map((c) => (
+              <option key={c.user_id} value={c.user_id}>
+                {c.name} · {c.city || "India"}
+              </option>
+            ))}
+          </select>
+        </label>
+        {customer && (
+          <p className="muted">
+            {customer.email}
+            {customer.city ? ` · ${customer.city}` : ""}
+            {` · budget ₹${budget}`}
+            {customer.completed_orders
+              ? ` · ${customer.completed_orders} past orders · usual ₹${customer.usual_total_inr}`
+              : " · no order history yet · bestsellers"}
+          </p>
+        )}
+      </div>
 
       <NavBar current="/">
         <a className="nav-cta" href="/demo">
@@ -109,8 +169,12 @@ export default function App() {
 
       <main className="layout">
         <ChatWindow
+          key={userId || "demo"}
           sessionId={sessionId}
           setSessionId={setSessionId}
+          userId={userId || "demo_user_01"}
+          customer={customer}
+          modelInfo={meta?.llm}
           onUserMessage={setLastUserRequest}
           onProposalHint={setProposal}
           onCheckoutReady={(result) => {
@@ -124,6 +188,11 @@ export default function App() {
             setProposal={setProposal}
             health={health}
             checkoutResult={checkoutResult}
+            userId={userId || "demo_user_01"}
+            budget={budget}
+            customer={customer}
+            sessionId={sessionId}
+            modelInfo={meta?.llm}
             onCheckoutReady={(result) => {
               setCheckoutResult(result);
               if (result.proposal) setProposal(result.proposal);

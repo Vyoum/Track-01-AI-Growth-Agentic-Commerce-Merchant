@@ -90,7 +90,8 @@
       "stock": 25,
       "tags": ["yoga", "fitness"],
       "complements": [
-        { "product_id": "prod_resistance_band", "priority": 1, "reason": "home workout pairing" }
+        { "product_id": "prod_resistance_band", "priority": 1, "reason": "home workout pairing" },
+        { "product_id": "prod_yoga_block", "priority": 2, "reason": "support for floor practice" }
       ]
     },
     {
@@ -165,6 +166,62 @@
       "substitute_with": "prod_protein_bundle",
       "complements": [
         { "product_id": "prod_shaker", "priority": 1, "reason": "commonly bought with protein" }
+      ]
+    },
+    {
+      "id": "prod_ragi_cookies",
+      "name": "Ragi Protein Cookies (8)",
+      "price_inr": 229,
+      "category": "grocery",
+      "stock": 48,
+      "tags": ["snack", "millet", "protein"],
+      "sales_count": 86,
+      "rating": 4.6,
+      "review_count": 41,
+      "complements": [
+        { "product_id": "prod_green_tea", "priority": 1, "reason": "evening snack with tea" }
+      ]
+    },
+    {
+      "id": "prod_haldi_latte",
+      "name": "Haldi Latte Mix 200g",
+      "price_inr": 249,
+      "category": "grocery",
+      "stock": 54,
+      "tags": ["wellness", "turmeric"],
+      "sales_count": 64,
+      "rating": 4.5,
+      "review_count": 28,
+      "complements": [
+        { "product_id": "prod_oats", "priority": 1, "reason": "warm breakfast pairing" }
+      ]
+    },
+    {
+      "id": "prod_copper_bottle",
+      "name": "Copper Water Bottle 900ml",
+      "price_inr": 649,
+      "category": "accessories",
+      "stock": 22,
+      "tags": ["hydration", "bottle"],
+      "sales_count": 37,
+      "rating": 4.4,
+      "review_count": 19,
+      "complements": [
+        { "product_id": "prod_electrolyte", "priority": 1, "reason": "daily hydration pairing" }
+      ]
+    },
+    {
+      "id": "prod_yoga_block",
+      "name": "Cork Yoga Block",
+      "price_inr": 349,
+      "category": "fitness",
+      "stock": 33,
+      "tags": ["yoga", "fitness"],
+      "sales_count": 29,
+      "rating": 4.7,
+      "review_count": 16,
+      "complements": [
+        { "product_id": "prod_yoga_mat", "priority": 1, "reason": "home practice pairing" }
       ]
     }
   ]

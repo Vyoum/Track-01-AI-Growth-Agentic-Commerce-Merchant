@@ -50,6 +50,19 @@
       "allowed_categories": [],
       "copy_key": "new_user_bestseller_addon",
       "copy_variants": ["new_user_bestseller_addon"]
+    },
+    {
+      "id": "monsoon_wellness",
+      "name": "Monsoon wellness ritual",
+      "enabled": true,
+      "opportunity": "category_cross_sell",
+      "target_segment": "returning_with_history",
+      "strategy": "catalog_complements",
+      "priority": 35,
+      "max_discount_pct": 0,
+      "allowed_categories": ["grocery"],
+      "copy_key": "cross_sell_addon",
+      "copy_variants": ["cross_sell_addon"]
     }
   ],
   "copy_templates": {

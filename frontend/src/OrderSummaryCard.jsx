@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   confirmProposal,
   createUsualProposal,
   decideAddon,
   failPayment,
+  fetchSpendMandate,
   loadRazorpayScript,
   verifyPayment,
 } from "./api.js";
+import ModelBadge from "./ModelBadge.jsx";
 
 export default function OrderSummaryCard({
   proposal,
@@ -14,20 +16,41 @@ export default function OrderSummaryCard({
   health,
   checkoutResult,
   onCheckoutReady,
+  userId = "demo_user_01",
+  budget = 800,
+  customer,
+  sessionId,
+  modelInfo,
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [localCheckout, setLocalCheckout] = useState(null);
   const [impulseWarning, setImpulseWarning] = useState(null);
+  const [mandate, setMandate] = useState(null);
 
   const activeCheckout = checkoutResult || localCheckout;
+  const hasHistory = (customer?.completed_orders || 0) > 0;
+
+  useEffect(() => {
+    let active = true;
+    fetchSpendMandate(userId, sessionId)
+      .then((data) => {
+        if (active) setMandate(data);
+      })
+      .catch(() => {
+        if (active) setMandate(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [userId, sessionId, checkoutResult, proposal?.status]);
 
   async function startDemo() {
     setBusy(true);
     setMessage("");
     setLocalCheckout(null);
     try {
-      const p = await createUsualProposal(800);
+      const p = await createUsualProposal(budget, userId);
       setProposal(p);
       if (p.status === "awaiting_merchant_approval" || p.campaign_decision?.merchant_approval_status === "paused") {
         setMessage(
@@ -83,7 +106,8 @@ export default function OrderSummaryCard({
       const result = await confirmProposal(
         proposal.id,
         proposal.total_inr,
-        acknowledgeImpulseWarning
+        acknowledgeImpulseWarning,
+        userId
       );
       setImpulseWarning(null);
       setProposal(result.proposal);
@@ -170,13 +194,24 @@ export default function OrderSummaryCard({
 
   return (
     <section className="panel summary">
-      <h2>The ticket</h2>
+      <div className="ticket-head">
+        <h2>The ticket</h2>
+        <ModelBadge llm={modelInfo} />
+      </div>
 
       <div className="actions">
         <button type="button" disabled={busy} onClick={startDemo}>
-          Compose usual under ₹800
+          {hasHistory ? `Compose usual under ₹${budget}` : `Compose popular picks under ₹${budget}`}
         </button>
       </div>
+
+      {mandate && (
+        <p className="muted ticket-mandate">
+          {customer?.name ? `${customer.name.split(" ")[0]} · ` : ""}
+          {mandate.tightest_period} cap room ₹{mandate.tightest_remaining_inr?.toLocaleString("en-IN")}
+          {mandate.tightest_period === "day" ? " today" : ""}
+        </p>
+      )}
 
       {!proposal ? (
         <p className="muted">No proposal yet — use chat or the demo button.</p>
